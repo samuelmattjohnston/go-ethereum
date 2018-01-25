@@ -1,6 +1,8 @@
 package cdc
 
 import (
+  "fmt"
+  "encoding/binary"
   "github.com/ethereum/go-ethereum/ethdb"
   "github.com/ethereum/go-ethereum/rlp"
   "errors"
@@ -24,9 +26,19 @@ type KeyValue struct {
 type Operation struct {
   Op byte
   Data []byte
+  Offset int64
+  Topic string
 }
 
 func (op *Operation) Apply(db ethdb.Database) error {
+  if op.Offset != 0 {
+    buf := make([]byte, binary.MaxVarintLen64)
+    binary.PutVarint(buf, op.Offset)
+    db.Put(
+      []byte(fmt.Sprintf("cdc-log-%v-offset", op.Topic)),
+      buf,
+    )
+  }
   switch op.Op {
   case OpPut:
     kv := &KeyValue{}
@@ -52,13 +64,15 @@ func (op *Operation) Bytes() ([]byte) {
   return append(data, op.Data...)
 }
 
-func OperationFromBytes(data []byte) (*Operation, error) {
+func OperationFromBytes(data []byte, topic string, offset int64) (*Operation, error) {
   if len(data) == 0 {
     return nil, errors.New("OperationFromBytes requires a []byte of length > 0")
   }
   return &Operation{
     Op: data[0],
     Data: data[1:],
+    Topic: topic,
+    Offset: offset,
   }, nil
 }
 
@@ -72,7 +86,7 @@ func PutOperation(key, value []byte) (*Operation, error) {
 }
 
 func DeleteOperation(key []byte) (*Operation, error) {
-  return &Operation{OpDelete, key}, nil
+  return &Operation{OpDelete, key, 0, ""}, nil
 }
 
 func WriteOperation(batch Batch) (*Operation, error) {
@@ -85,9 +99,9 @@ func WriteOperation(batch Batch) (*Operation, error) {
 }
 
 func GetOperation(key []byte) (*Operation, error) {
-  return &Operation{OpGet, key}, nil
+  return &Operation{OpGet, key, 0, ""}, nil
 }
 
 func HasOperation(key []byte) (*Operation, error) {
-  return &Operation{OpHas, key}, nil
+  return &Operation{OpHas, key, 0, ""}, nil
 }

@@ -52,7 +52,7 @@ func (consumer *KafkaLogConsumer) Messages() <-chan *Operation {
   consumer.outputChannel = make(chan *Operation, cap(inputChannel))
   go func() {
     for input := range inputChannel {
-      op, err := OperationFromBytes(input.Value)
+      op, err := OperationFromBytes(input.Value, input.Topic, input.Offset)
       if err != nil {
         log.Printf("Message(topic=%v, partition=%v, offset=%v) is not a valid operation: %v\n", input.Topic, input.Partition, input.Offset, err.Error())
       }

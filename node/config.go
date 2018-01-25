@@ -138,6 +138,11 @@ type Config struct {
 
 	// Logger is a custom logger to use with the p2p.Server.
 	Logger log.Logger
+
+	KafkaLogSourceBroker string `toml:",omitempty"`
+	KafkaLogSinkBroker string `toml:",omitempty"`
+	KafkaLogSourceTopic string `toml:",omitempty"`
+	KafkaLogSinkTopic string `toml:",omitempty"`
 }
 
 // IPCEndpoint resolves an IPC endpoint based on a configured value, taking into

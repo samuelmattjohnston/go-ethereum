@@ -80,8 +80,12 @@ func (db *DBWrapper) Delete(key []byte) error {
 }
 
 func (db *DBWrapper) Close() {
-  db.writeStream.Close()
-  db.readStream.Close()
+  if db.writeStream != nil {
+    db.writeStream.Close()
+  }
+  if db.readStream != nil {
+    db.readStream.Close()
+  }
   db.db.Close()
 }
 

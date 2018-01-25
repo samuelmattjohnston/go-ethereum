@@ -119,6 +119,10 @@ var (
 		utils.GpoPercentileFlag,
 		utils.ExtraDataFlag,
 		configFileFlag,
+		utils.KafkaLogSourceBrokerFlag,
+		utils.KafkaLogSinkBrokerFlag,
+		utils.KafkaLogSinkTopicFlag,
+		utils.KafkaLogSourceTopicFlag,
 	}
 
 	rpcFlags = []cli.Flag{
