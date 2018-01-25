@@ -24,6 +24,11 @@ import (
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/rpc"
+	"encoding/binary"
+	"github.com/ethereum/go-ethereum/ethdb/cdc"
+	"github.com/Shopify/sarama"
+	"fmt"
+	"errors"
 )
 
 // ServiceContext is a collection of service independent options inherited from
@@ -40,12 +45,45 @@ type ServiceContext struct {
 // if no previous can be found) from within the node's data directory. If the
 // node is an ephemeral one, a memory database is returned.
 func (ctx *ServiceContext) OpenDatabase(name string, cache int, handles int) (ethdb.Database, error) {
+	var db ethdb.Database
+	var err error
 	if ctx.config.DataDir == "" {
-		return ethdb.NewMemDatabase()
+		db, err = ethdb.NewMemDatabase()
+	} else {
+		db, err = ethdb.NewLDBDatabase(ctx.config.resolvePath(name), cache, handles)
 	}
-	db, err := ethdb.NewLDBDatabase(ctx.config.resolvePath(name), cache, handles)
 	if err != nil {
-		return nil, err
+		return db, err
+	}
+	if ctx.config.KafkaLogSinkBroker != "" {
+		producer, err := cdc.NewKafkaLogProducerFromURLs(
+			[]string{ctx.config.KafkaLogSinkBroker},
+			ctx.config.KafkaLogSinkTopic,
+		)
+		if err != nil { return nil, err }
+		// TODO: Add options for a readStream
+		db = cdc.NewDBWrapper(db, producer, nil)
+	} else if ctx.config.KafkaLogSourceBroker != "" {
+		offsetBytes, err := db.Get([]byte(fmt.Sprintf("cdc-log-%v-offset", ctx.config.KafkaLogSourceTopic)))
+		var offset int64
+		var bytesRead int
+		if err != nil || len(offsetBytes) == 0 {
+			offset = sarama.OffsetOldest
+		} else {
+			offset, bytesRead = binary.Varint(offsetBytes)
+			if bytesRead <= 0 { return nil, errors.New("Offset buffer too small") }
+		}
+		consumer, err := cdc.NewKafkaLogConsumerFromURLs(
+			[]string{ctx.config.KafkaLogSourceBroker},
+			ctx.config.KafkaLogSourceTopic,
+			offset,
+		)
+		if err != nil { return nil, err }
+		go func() {
+			for operation := range consumer.Messages() {
+				operation.Apply(db)
+			}
+		}()
 	}
 	return db, nil
 }

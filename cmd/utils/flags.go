@@ -537,6 +537,28 @@ var (
 		Usage: "Minimum POW accepted",
 		Value: whisper.DefaultMinimumPoW,
 	}
+	KafkaLogSourceBrokerFlag = cli.StringFlag{
+		// TODO: Make this into a list, and if the argument is provided multiple
+		// times append each occurrence
+		Name: "kafka.source.broker",
+		Usage: "Kafka broker hostname and port",
+	}
+	KafkaLogSinkBrokerFlag = cli.StringFlag{
+		// TODO: Make this into a list, and if the argument is provided multiple
+		// times append each occurrence
+		Name: "kafka.sink.broker",
+		Usage: "Kafka broker hostname and port",
+	}
+	KafkaLogSinkTopicFlag = cli.StringFlag{
+		Name: "kafka.sink.topic",
+		Usage: "Kafka broker hostname and port",
+		Value: "geth", // TODO: Maybe the default could be based on the Ethereum network we connect to
+	}
+	KafkaLogSourceTopicFlag = cli.StringFlag{
+		Name: "kafka.source.topic",
+		Usage: "Kafka broker hostname and port",
+		Value: "geth", // TODO: Maybe the default could be based on the Ethereum network we connect to
+	}
 )
 
 // MakeDataDir retrieves the currently requested data directory, terminating
@@ -877,6 +899,10 @@ func SetNodeConfig(ctx *cli.Context, cfg *node.Config) {
 	setHTTP(ctx, cfg)
 	setWS(ctx, cfg)
 	setNodeUserIdent(ctx, cfg)
+	cfg.KafkaLogSourceBroker = ctx.GlobalString(KafkaLogSourceBrokerFlag.Name)
+	cfg.KafkaLogSinkBroker = ctx.GlobalString(KafkaLogSinkBrokerFlag.Name)
+	cfg.KafkaLogSourceTopic = ctx.GlobalString(KafkaLogSourceTopicFlag.Name)
+	cfg.KafkaLogSinkTopic = ctx.GlobalString(KafkaLogSinkTopicFlag.Name)
 
 	switch {
 	case ctx.GlobalIsSet(DataDirFlag.Name):

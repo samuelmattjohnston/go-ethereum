@@ -40,7 +40,7 @@ func opsEqual(op1, op2 *cdc.Operation) (bool) {
 }
 
 func checkOperations(op *cdc.Operation, t *testing.T) {
-  op2, err := cdc.OperationFromBytes(op.Bytes())
+  op2, err := cdc.OperationFromBytes(op.Bytes(), "", 0)
   if err != nil {
     t.Fatalf("Getting operation from bytes failed: %v", err)
   }
