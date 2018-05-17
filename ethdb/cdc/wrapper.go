@@ -16,6 +16,10 @@ func (batch *BatchWrapper) Put(key, value []byte) (error) {
   return batch.batch.Put(key, value)
 }
 
+func (batch *BatchWrapper) Reset() {
+  batch.batch.Reset()
+}
+
 func (batch *BatchWrapper) ValueSize() int {
   return batch.batch.ValueSize()
 }
