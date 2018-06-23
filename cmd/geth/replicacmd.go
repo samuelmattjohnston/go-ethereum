@@ -39,11 +39,11 @@ import (
 
 var (
 	replicaCommandBrokerFlag = cli.StringFlag{
-		Name:  "kafka.source.broker",
+		Name:  "kafka.broker",
 		Usage: "The Kafka Broker to pull change data from",
 	}
 	replicaCommandTopicFlag = cli.StringFlag{
-		Name:  "kafka.source.topic",
+		Name:  "kafka.topic",
 		Usage: "The Kafka Topic to pull change data from",
 	}
 	replicaCommand = cli.Command{
@@ -162,8 +162,8 @@ func makeReplicaNode(ctx *cli.Context) (*node.Node, gethConfig) {
 			chainDb,
 			&cfg.Eth,
 			sctx,
-			[]string{ctx.GlobalString(utils.KafkaLogSourceBrokerFlag.Name)},
-			ctx.GlobalString(utils.KafkaLogSourceTopicFlag.Name),
+			[]string{ctx.GlobalString(utils.KafkaLogSinkBrokerFlag.Name)},
+			ctx.GlobalString(utils.KafkaLogSinkTopicFlag.Name),
 		)
 	})
 	// replicaModule.ReplicaService)
