@@ -16,6 +16,10 @@
 
 package ethdb
 
+import (
+	"github.com/syndtr/goleveldb/leveldb/iterator"
+)
+
 // Code using batches should try to add this much data to the batch.
 // The value was determined empirically.
 const IdealBatchSize = 100 * 1024
@@ -33,6 +37,12 @@ type Database interface {
 	Delete(key []byte) error
 	Close()
 	NewBatch() Batch
+}
+
+// IterableDatabase provides a mechanism for iterating over the database.
+type IterableDatabase interface {
+	Database
+	NewIterator() iterator.Iterator
 }
 
 // Batch is a write-only database that commits changes to its host database

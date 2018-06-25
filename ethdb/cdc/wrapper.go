@@ -1,6 +1,7 @@
 package cdc
 import (
   "github.com/ethereum/go-ethereum/ethdb"
+  "github.com/syndtr/goleveldb/leveldb/iterator"
 )
 
 type BatchWrapper struct {
@@ -96,6 +97,10 @@ func (db *DBWrapper) Close() {
 func (db *DBWrapper) NewBatch() ethdb.Batch {
   dbBatch := db.db.NewBatch()
   return &BatchWrapper{dbBatch, db.writeStream, []KeyValue{}}
+}
+
+func (db *DBWrapper) NewIterator() iterator.Iterator {
+  return db.db.(ethdb.IterableDatabase).NewIterator()
 }
 
 func NewDBWrapper(db ethdb.Database, writeStream, readStream LogProducer) ethdb.Database {
