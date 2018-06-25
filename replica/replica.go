@@ -16,6 +16,7 @@ import (
   "github.com/ethereum/go-ethereum/params"
   "github.com/Shopify/sarama"
   "fmt"
+  "time"
 )
 
 type Replica struct {
@@ -52,16 +53,6 @@ func (r *Replica) Stop() error {
 }
 
 func NewReplica(db ethdb.Database, config *eth.Config, ctx *node.ServiceContext, kafkaSourceBroker []string, kafkaTopic string) (*Replica, error) {
-  chainConfig, _, _ := core.SetupGenesisBlock(db, config.Genesis)
-  engine := eth.CreateConsensusEngine(ctx, &config.Ethash, chainConfig, db)
-  hc, err := core.NewHeaderChain(db, chainConfig, engine, func() bool { return false })
-  if err != nil {
-    return nil, err
-  }
-  bc, err := core.NewBlockChain(db, &core.CacheConfig{Disabled: true}, chainConfig, engine, vm.Config{})
-  if err != nil {
-    return nil, err
-  }
   offsetBytes, err := db.Get([]byte(fmt.Sprintf("cdc-log-%v-offset", kafkaTopic)))
   var offset int64
   var bytesRead int
@@ -77,10 +68,23 @@ func NewReplica(db ethdb.Database, config *eth.Config, ctx *node.ServiceContext,
     offset,
   )
   if err != nil { return nil, err }
-  go func() {
+  timer := time.NewTimer(100 * time.Millisecond)
+  go func(t *time.Timer) {
     for operation := range consumer.Messages() {
+      t.Reset(100 * time.Millisecond)
       operation.Apply(db)
     }
-  }()
+  }(timer)
+  <-timer.C
+  chainConfig, _, _ := core.SetupGenesisBlock(db, config.Genesis)
+  engine := eth.CreateConsensusEngine(ctx, &config.Ethash, chainConfig, db)
+  hc, err := core.NewHeaderChain(db, chainConfig, engine, func() bool { return false })
+  if err != nil {
+    return nil, err
+  }
+  bc, err := core.NewBlockChain(db, &core.CacheConfig{Disabled: true}, chainConfig, engine, vm.Config{})
+  if err != nil {
+    return nil, err
+  }
   return &Replica{db, hc, chainConfig, bc}, nil
 }

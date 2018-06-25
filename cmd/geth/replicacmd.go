@@ -51,6 +51,7 @@ system and acts as an RPC node based on the replicated data.
 		Flags: []cli.Flag{
 			utils.KafkaLogBrokerFlag,
 			utils.KafkaLogTopicFlag,
+			utils.DataDirFlag,
 		},
 	}
 	replicaTxPoolConfig = core.TxPoolConfig{
