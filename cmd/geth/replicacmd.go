@@ -38,14 +38,6 @@ import (
 )
 
 var (
-	replicaCommandBrokerFlag = cli.StringFlag{
-		Name:  "kafka.source.broker",
-		Usage: "The Kafka Broker to pull change data from",
-	}
-	replicaCommandTopicFlag = cli.StringFlag{
-		Name:  "kafka.source.topic",
-		Usage: "The Kafka Topic to pull change data from",
-	}
 	replicaCommand = cli.Command{
 		Action:    utils.MigrateFlags(replica), // keep track of migration progress
 		Name:      "replica",
@@ -57,8 +49,8 @@ The Geth replica captures a Geth node's write operations via a change-data-captu
 system and acts as an RPC node based on the replicated data.
 `,
 		Flags: []cli.Flag{
-			replicaCommandBrokerFlag,
-			replicaCommandTopicFlag,
+			utils.KafkaLogBrokerFlag,
+			utils.KafkaLogTopicFlag,
 		},
 	}
 	replicaTxPoolConfig = core.TxPoolConfig{
@@ -162,13 +154,10 @@ func makeReplicaNode(ctx *cli.Context) (*node.Node, gethConfig) {
 			chainDb,
 			&cfg.Eth,
 			sctx,
-			[]string{ctx.GlobalString(utils.KafkaLogSourceBrokerFlag.Name)},
-			ctx.GlobalString(utils.KafkaLogSourceTopicFlag.Name),
+			[]string{ctx.GlobalString(utils.KafkaLogBrokerFlag.Name)},
+			ctx.GlobalString(utils.KafkaLogTopicFlag.Name),
 		)
 	})
-	// replicaModule.ReplicaService)
-
-
 	return stack, cfg
 }
 

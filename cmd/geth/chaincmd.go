@@ -48,6 +48,8 @@ var (
 		ArgsUsage: "<genesisPath>",
 		Flags: []cli.Flag{
 			utils.DataDirFlag,
+			utils.KafkaLogTopicFlag,
+			utils.KafkaLogBrokerFlag,
 			utils.LightModeFlag,
 		},
 		Category: "BLOCKCHAIN COMMANDS",

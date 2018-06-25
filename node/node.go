@@ -25,7 +25,6 @@ import (
 	"reflect"
 	"strings"
 	"sync"
-	"encoding/binary"
 
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/ethdb"
@@ -36,7 +35,6 @@ import (
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/prometheus/prometheus/util/flock"
-	"github.com/Shopify/sarama"
 )
 
 // Node is a container on which services can be registered.
@@ -655,35 +653,14 @@ func (n *Node) OpenDatabase(name string, cache, handles int) (ethdb.Database, er
 	if err != nil {
 		return db, err
 	}
-	if n.config.KafkaLogSinkBroker != "" {
+	if n.config.KafkaLogBroker != "" {
 		producer, err := cdc.NewKafkaLogProducerFromURLs(
-			[]string{n.config.KafkaLogSinkBroker},
-			n.config.KafkaLogSinkTopic,
+			[]string{n.config.KafkaLogBroker},
+			n.config.KafkaLogTopic,
 		)
 		if err != nil { return nil, err }
 		// TODO: Add options for a readStream
 		db = cdc.NewDBWrapper(db, producer, nil)
-	} else if n.config.KafkaLogSourceBroker != "" {
-		offsetBytes, err := db.Get([]byte(fmt.Sprintf("cdc-log-%v-offset", n.config.KafkaLogSourceTopic)))
-		var offset int64
-		var bytesRead int
-		if err != nil || len(offsetBytes) == 0 {
-			offset = sarama.OffsetOldest
-		} else {
-			offset, bytesRead = binary.Varint(offsetBytes)
-			if bytesRead <= 0 { return nil, errors.New("Offset buffer too small") }
-		}
-		consumer, err := cdc.NewKafkaLogConsumerFromURLs(
-			[]string{n.config.KafkaLogSourceBroker},
-			n.config.KafkaLogSourceTopic,
-			offset,
-		)
-		if err != nil { return nil, err }
-		go func() {
-			for operation := range consumer.Messages() {
-				operation.Apply(db)
-			}
-		}()
 	}
 	return db, nil
 }
