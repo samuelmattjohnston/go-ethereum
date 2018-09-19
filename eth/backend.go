@@ -219,6 +219,18 @@ func CreateDB(ctx *node.ServiceContext, config *Config, name string) (ethdb.Data
 	return db, nil
 }
 
+// CreateRawDB creates the chain database.
+func CreateRawDB(ctx *node.ServiceContext, config *Config, name string) (ethdb.Database, error) {
+	db, err := ctx.OpenRawDatabase(name, config.DatabaseCache, config.DatabaseHandles)
+	if err != nil {
+		return nil, err
+	}
+	if db, ok := db.(*ethdb.LDBDatabase); ok {
+		db.Meter("eth/db/chaindata/")
+	}
+	return db, nil
+}
+
 // CreateConsensusEngine creates the required type of consensus engine instance for an Ethereum service
 func CreateConsensusEngine(ctx *node.ServiceContext, chainConfig *params.ChainConfig, config *ethash.Config, notify []string, noverify bool, db ethdb.Database) consensus.Engine {
 	// If proof-of-authority is requested, set it up
