@@ -74,7 +74,7 @@ func (backend *ReplicaBackend) BlockByNumber(ctx context.Context, blockNr rpc.Bl
 	// the state root for the specified block and the chaindb.
 func (backend *ReplicaBackend) StateAndHeaderByNumber(ctx context.Context, blockNr rpc.BlockNumber) (*state.StateDB, *types.Header, error) {
   block, err := backend.BlockByNumber(ctx, blockNr)
-  if err != nil {
+  if block == nil || err != nil {
     return nil, nil, err
   }
   stateDB, err := backend.bc.StateAt(block.Hash())
