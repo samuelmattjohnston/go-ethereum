@@ -584,6 +584,18 @@ var (
 		Name:  "shh.restrict-light",
 		Usage: "Restrict connection between two whisper light clients",
 	}
+	KafkaLogBrokerFlag = cli.StringFlag{
+		// TODO: Make this into a list, and if the argument is provided multiple
+		// times append each occurrence
+		Name: "kafka.broker",
+		Usage: "Kafka broker hostname and port",
+	}
+	KafkaLogTopicFlag = cli.StringFlag{
+		Name: "kafka.topic",
+		Usage: "Kafka broker hostname and port",
+		Value: "geth", // TODO: Maybe the default could be based on the Ethereum network we connect to
+	}
+
 
 	// Metrics flags
 	MetricsEnabledFlag = cli.BoolFlag{
@@ -980,6 +992,8 @@ func SetNodeConfig(ctx *cli.Context, cfg *node.Config) {
 	setHTTP(ctx, cfg)
 	setWS(ctx, cfg)
 	setNodeUserIdent(ctx, cfg)
+	cfg.KafkaLogBroker = ctx.GlobalString(KafkaLogBrokerFlag.Name)
+	cfg.KafkaLogTopic = ctx.GlobalString(KafkaLogTopicFlag.Name)
 
 	setDataDir(ctx, cfg)
 

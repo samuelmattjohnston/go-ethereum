@@ -157,6 +157,10 @@ type Config struct {
 	staticNodesWarning     bool
 	trustedNodesWarning    bool
 	oldGethResourceWarning bool
+
+	KafkaLogBroker string `toml:",omitempty"`
+	KafkaLogTopic string `toml:",omitempty"`
+
 }
 
 // IPCEndpoint resolves an IPC endpoint based on a configured value, taking into

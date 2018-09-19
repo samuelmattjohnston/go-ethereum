@@ -135,6 +135,8 @@ var (
 		utils.EWASMInterpreterFlag,
 		utils.EVMInterpreterFlag,
 		configFileFlag,
+		utils.KafkaLogBrokerFlag,
+		utils.KafkaLogTopicFlag,
 	}
 
 	rpcFlags = []cli.Flag{
@@ -200,6 +202,7 @@ func init() {
 		licenseCommand,
 		// See config.go
 		dumpConfigCommand,
+		replicaCommand,
 	}
 	sort.Sort(cli.CommandsByName(app.Commands))
 

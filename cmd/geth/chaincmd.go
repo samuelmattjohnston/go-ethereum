@@ -48,6 +48,8 @@ var (
 		ArgsUsage: "<genesisPath>",
 		Flags: []cli.Flag{
 			utils.DataDirFlag,
+			utils.KafkaLogTopicFlag,
+			utils.KafkaLogBrokerFlag,
 		},
 		Category: "BLOCKCHAIN COMMANDS",
 		Description: `
@@ -190,7 +192,7 @@ func initGenesis(ctx *cli.Context) error {
 	}
 	// Open an initialise both full and light databases
 	stack := makeFullNode(ctx)
-	for _, name := range []string{"chaindata", "lightchaindata"} {
+	for _, name := range []string{"chaindata", "lightchaindata", "replicachaindata"} {
 		chaindb, err := stack.OpenDatabase(name, 0, 0)
 		if err != nil {
 			utils.Fatalf("Failed to open database: %v", err)
