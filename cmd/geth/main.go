@@ -135,6 +135,7 @@ var (
 		configFileFlag,
 		utils.KafkaLogBrokerFlag,
 		utils.KafkaLogTopicFlag,
+		utils.KafkaTransactionTopicFlag,
 	}
 
 	rpcFlags = []cli.Flag{

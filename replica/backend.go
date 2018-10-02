@@ -2,6 +2,8 @@ package replica
 
 import (
   "context"
+  "errors"
+  "fmt"
   "math/big"
   "github.com/ethereum/go-ethereum/eth/downloader"
   "github.com/ethereum/go-ethereum/ethdb"
@@ -23,6 +25,7 @@ type ReplicaBackend struct {
   hc *core.HeaderChain
   chainConfig *params.ChainConfig
   bc *core.BlockChain
+  transactionProducer TransactionProducer
 }
 
 	// General Ethereum API
@@ -119,7 +122,11 @@ func (backend *ReplicaBackend) SubscribeChainSideEvent(ch chan<- core.ChainSideE
 
 	// Perhaps we can put these on a Kafka queue back to the full node?
 func (backend *ReplicaBackend) SendTx(ctx context.Context, signedTx *types.Transaction) error {
-  return nil
+  if backend.transactionProducer == nil {
+    return errors.New("This api is not configured for accepting transactions")
+  }
+  fmt.Printf("%v", backend.transactionProducer)
+  return backend.transactionProducer.Emit(signedTx)
 }
 
 	// Read replicas won't have the p2p functionality, so these will be noops
