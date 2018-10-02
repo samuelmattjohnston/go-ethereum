@@ -50,6 +50,7 @@ system and acts as an RPC node based on the replicated data.
 		Flags: []cli.Flag{
 			utils.KafkaLogBrokerFlag,
 			utils.KafkaLogTopicFlag,
+			utils.KafkaTransactionTopicFlag,
 			utils.DataDirFlag,
 		},
 	}
@@ -76,7 +77,7 @@ system and acts as an RPC node based on the replicated data.
 			DatasetsInMem:  1,
 			DatasetsOnDisk: 2,
 		},
-		NetworkId:     1,
+		NetworkId:     19870212,
 		LightPeers:    0,
 		DatabaseCache: 0,
 		TrieCache:     0,
@@ -156,6 +157,7 @@ func makeReplicaNode(ctx *cli.Context) (*node.Node, gethConfig) {
 			sctx,
 			[]string{ctx.GlobalString(utils.KafkaLogBrokerFlag.Name)},
 			ctx.GlobalString(utils.KafkaLogTopicFlag.Name),
+			ctx.GlobalString(utils.KafkaTransactionTopicFlag.Name),
 		)
 	})
 	return stack, cfg

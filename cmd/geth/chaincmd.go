@@ -50,6 +50,7 @@ var (
 			utils.DataDirFlag,
 			utils.KafkaLogTopicFlag,
 			utils.KafkaLogBrokerFlag,
+			utils.KafkaTransactionTopicFlag,
 		},
 		Category: "BLOCKCHAIN COMMANDS",
 		Description: `
