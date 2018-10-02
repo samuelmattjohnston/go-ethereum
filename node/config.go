@@ -160,6 +160,7 @@ type Config struct {
 
 	KafkaLogBroker string `toml:",omitempty"`
 	KafkaLogTopic string `toml:",omitempty"`
+	KafkaTransactionTopic string `toml:",omitempty"`
 
 }
 

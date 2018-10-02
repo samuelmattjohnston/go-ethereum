@@ -592,8 +592,13 @@ var (
 	}
 	KafkaLogTopicFlag = cli.StringFlag{
 		Name: "kafka.topic",
-		Usage: "Kafka broker hostname and port",
+		Usage: "Kafka broker replication topic name",
 		Value: "geth", // TODO: Maybe the default could be based on the Ethereum network we connect to
+	}
+	KafkaTransactionTopicFlag = cli.StringFlag{
+		Name: "kafka.tx.topic",
+		Usage: "Kafka transaction topic name",
+		Value: "",
 	}
 
 
@@ -994,6 +999,7 @@ func SetNodeConfig(ctx *cli.Context, cfg *node.Config) {
 	setNodeUserIdent(ctx, cfg)
 	cfg.KafkaLogBroker = ctx.GlobalString(KafkaLogBrokerFlag.Name)
 	cfg.KafkaLogTopic = ctx.GlobalString(KafkaLogTopicFlag.Name)
+	cfg.KafkaTransactionTopic = ctx.GlobalString(KafkaTransactionTopicFlag.Name)
 
 	setDataDir(ctx, cfg)
 
