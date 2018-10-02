@@ -11,8 +11,8 @@
 
 ## Running with writable replica nodes
 
-Check out this code base so it lives at:
-`${HOME}/go/src/github.com/ethereum/go-ethereum/cmd/geth`
+Check out this code base so it lives at:  
+`${HOME}/go/src/github.com/ethereum/go-ethereum/cmd/geth`  
 
 Or look up overriding you `$GOPATH` https://github.com/golang/go/wiki/GOPATH
 
@@ -29,8 +29,8 @@ More details will be provided at bottom
 
 #### Prepare your genesis.json:
 
-For these steps, lives in the top level directory of this repository
-For version 1.9 and lower of geth, keep in mind your `chainId`
+For these steps, lives in the top level directory of this repository  
+For version 1.9 and lower of geth, keep in mind your `chainId`  
 
     {
       "config": {
@@ -52,9 +52,11 @@ For version 1.9 and lower of geth, keep in mind your `chainId`
 
 #### Seed the disk directories of the master and slave replica
 
-For this guide, we'll make the:
-  master node use /tmp/replicatest
-  slave replica use /tmp/replicatest2
+For this guide, we'll make the:  
+- master node use /tmp/replicatest  
+- slave replica use /tmp/replicatest2  
+
+eg:
 
     ./geth init --datadir=/tmp/replicatest ../../genesis.json
     ./geth init --datadir=/tmp/replicatest2 ../../genesis.json
@@ -67,19 +69,21 @@ For this guide, we'll make the:
 #### Run it
 
 
-Set the master flags up so:
+Set the master flags up so:  
+- `networkid` matches your `chainId` in the `genesis.json`  
+- specify the `genesis.json` you created earlier  
+- specify the data directory we seeded earlier  
+- use the flags: `--rpc --rpccorsdomain='*'` if doing testing on only the master node, won't do anything if we are enabling replicas  
 
-  `networkid` matches your `chainId` in the `genesis.json`
-  specify the `genesis.json` you created earlier
-  specify the data directory we seeded earlier
-  use the flags: `--rpc --rpccorsdomain='*'` if doing testing on only the master node, won't do anything if we are enabling replicas
+eg:
 
-    ./geth --kafka.broker=localhost:9092 --mine --miner.etherbase 1c522b369b0e5981a50687e97e442754538e3dfd --datadir=/tmp/replicatest/ --networkid=19870212 --miner.threads 1 --port 30304 --syncmode full --gcmode archive  
+    ./geth --kafka.broker=localhost:9092 --mine --miner.etherbase 1c522b369b0e5981a50687e97e442754538e3dfd --datadir=/tmp/replicatest/ --networkid=19870212 --miner.threads 1 --port 30304 --syncmode full --gcmode archive
 
-Set up the slave replica flags so:
+Set up the slave replica flags so:  
+- `kafka.tx.topic` is set to something, `txtest` is this example, otherwise you'll have read only replicas  
+- specify the data directory we seeded earlier  
 
-  `kafka.tx.topic` is set to something, `txtest` is this example, otherwise you'll have read only replicas
-  specify the data directory we seeded earlier
+eg:
 
     ./geth replica --kafka.tx.topic=txtest --kafka.broker=localhost:9092 --datadir=/tmp/replicatest2/
 
@@ -92,8 +96,8 @@ Set up the slave replica flags so:
 
 #### Try to submit an transaction
 
-Generate coins:
-Generate your account, and then restart your master, changing the flag for `miner.etherbase`
+Generate coins:  
+Generate your account, and then restart your master, changing the flag for `miner.etherbase`  
 
 Your transaction will be displayed on your kafaka server, and you should see it git spit out on the console when you run the command provided earlier.
 
@@ -105,8 +109,8 @@ Write an app, or do it by hand for testing
 
 doing it by hand:
 
-    geth attach /tmp/replicatest/geth.ipc
-    web3.personal.newAccount()
+    geth attach /tmp/replicatest/geth.ipc  
+    web3.personal.newAccount()  
 
 Take that account, and then restart your master, changing the flag for `miner.etherbase` ( Yes you do need coin for this )
 
@@ -121,19 +125,19 @@ Post your transaction to the master (Should have been obtained from the kafaka q
 # ISSUES ENCOUNTERED:
 ## Invalid Sender
 
-Your client is using the wrong `chainId` due to improperly configured `networkId`. Make sure they are the same. Master defaults to `1` if not set, and the read replcias are hard coded.
-This is due to a long outstanding issue since geth 1.6 and apps that infer the `chainId` , I'll post some reading material:
+Your client is using the wrong `chainId` due to improperly configured `networkId`. Make sure they are the same. Master defaults to `1` if not set, and the read replcias are hard coded.  
+This is due to a long outstanding issue since geth 1.6 and apps that infer the `chainId` , I'll post some reading material:  
 
-https://github.com/MetaMask/metamask-extension/issues/1722
-MetaMask can not send transactions to localhost:8545 · Issue #1722 · MetaMask/metamask-extension
+https://github.com/MetaMask/metamask-extension/issues/1722  
+MetaMask can not send transactions to localhost:8545 · Issue #1722 · MetaMask/metamask-extension  
 > i think geth 1.6 no longer defaults the net id to chain id, so we're hearing this issue recently. we dont currently have a way to query the chainId directly so have always used the network id
 
-https://github.com/ethereum/EIPs/blob/master/EIPS/eip-155.md
-ethereum/EIPs The Ethereum Improvement Proposal repository.
+https://github.com/ethereum/EIPs/blob/master/EIPS/eip-155.md  
+ethereum/EIPs The Ethereum Improvement Proposal repository.  
 
 
-https://github.com/ethereumproject/go-ethereum/wiki/FAQ#what-is-the-difference-between-chain-id-chain-identity-and-network-id
-ethereumproject/go-ethereum FAQ
+https://github.com/ethereumproject/go-ethereum/wiki/FAQ#what-is-the-difference-between-chain-id-chain-identity-and-network-id  
+ethereumproject/go-ethereum FAQ  
 
 > Flags For Your Private Network
 > There are some command line options (also called "flags") that are necessary in order to make sure that your network is private.
