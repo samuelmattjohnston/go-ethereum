@@ -5,7 +5,8 @@ import (
   // "log"
   "fmt"
   "github.com/ethereum/go-ethereum/core/types"
-  "encoding/json"
+  "github.com/ethereum/go-ethereum/rlp"
+  // "encoding/hex"
 )
 
 type KafkaTransactionProducer struct {
@@ -19,7 +20,8 @@ func (producer *KafkaTransactionProducer) Close() {
 }
 
 func (producer *KafkaTransactionProducer) Emit(tx *types.Transaction) error {
-  txBytes, err := json.Marshal(tx)
+  txBytes, err := rlp.EncodeToBytes(tx)
+  fmt.Printf("%#x\n", txBytes)
   if err != nil {
     return err
   }
