@@ -163,4 +163,4 @@ Your unlocked default account needs funds to send transactions. I don't know why
 
     geth replica --kafka.tx.topic=txtest --kafka.broker=10.142.0.3:32768
 
-    geth --kafka.broker=10.142.0.3:32768 --kafka.tx.topic=txtest --rpc --syncmode full --gcmode archive
+    geth --kafka.broker=10.142.0.3:9092 --kafka.tx.topic=txtest --rpc --syncmode full --gcmode archive

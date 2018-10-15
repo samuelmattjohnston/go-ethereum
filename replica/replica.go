@@ -93,7 +93,7 @@ func NewReplica(db ethdb.Database, config *eth.Config, ctx *node.ServiceContext,
   if err != nil {
     return nil, err
   }
-  bc, err := core.NewBlockChain(db, &core.CacheConfig{Disabled: true}, chainConfig, engine, vm.Config{})
+  bc, err := core.NewBlockChain(db, &core.CacheConfig{Disabled: true}, chainConfig, engine, vm.Config{}, nil)
   if err != nil {
     return nil, err
   }
