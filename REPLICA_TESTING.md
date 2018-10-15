@@ -157,3 +157,10 @@ Create and unlock a default account, as described in manually posting to your ma
 This was encountered in geth command line shell
 
 Your unlocked default account needs funds to send transactions. I don't know why, but some reason this happened to me. mine on it for a sec by restarting master, and changing the mining address, as described above
+
+
+# Running for real:
+
+    geth replica --kafka.tx.topic=txtest --kafka.broker=10.142.0.3:32768
+
+    geth --kafka.broker=10.142.0.3:32768 --kafka.tx.topic=txtest --rpc --syncmode full --gcmode archive
