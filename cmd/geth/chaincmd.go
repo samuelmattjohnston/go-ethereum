@@ -50,6 +50,7 @@ var (
 			utils.DataDirFlag,
 			utils.KafkaLogTopicFlag,
 			utils.KafkaLogBrokerFlag,
+			utils.KafkaTransactionTopicFlag,
 		},
 		Category: "BLOCKCHAIN COMMANDS",
 		Description: `
@@ -342,9 +343,9 @@ func importPreimages(ctx *cli.Context) error {
 
 	start := time.Now()
 	if err := utils.ImportPreimages(diskdb, ctx.Args().First()); err != nil {
-		utils.Fatalf("Export error: %v\n", err)
+		utils.Fatalf("Import error: %v\n", err)
 	}
-	fmt.Printf("Export done in %v\n", time.Since(start))
+	fmt.Printf("Import done in %v\n", time.Since(start))
 	return nil
 }
 

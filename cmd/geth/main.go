@@ -130,9 +130,12 @@ var (
 		utils.NoCompactionFlag,
 		utils.GpoBlocksFlag,
 		utils.GpoPercentileFlag,
+		utils.EWASMInterpreterFlag,
+		utils.EVMInterpreterFlag,
 		configFileFlag,
 		utils.KafkaLogBrokerFlag,
 		utils.KafkaLogTopicFlag,
+		utils.KafkaTransactionTopicFlag,
 	}
 
 	rpcFlags = []cli.Flag{
@@ -153,6 +156,7 @@ var (
 		utils.WhisperEnabledFlag,
 		utils.WhisperMaxMessageSizeFlag,
 		utils.WhisperMinPOWFlag,
+		utils.WhisperRestrictConnectionBetweenLightClientsFlag,
 	}
 
 	metricsFlags = []cli.Flag{

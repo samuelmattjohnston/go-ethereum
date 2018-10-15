@@ -24,6 +24,7 @@ type Replica struct {
   hc *core.HeaderChain
   chainConfig *params.ChainConfig
   bc *core.BlockChain
+  transactionProducer TransactionProducer
 }
 
 func (r *Replica) Protocols() []p2p.Protocol {
@@ -35,6 +36,7 @@ func (r *Replica) APIs() []rpc.API {
     hc: r.hc,
     chainConfig: r.chainConfig,
     bc: r.bc,
+    transactionProducer: r.transactionProducer,
   }),
   rpc.API{
     Namespace: "net",
@@ -52,7 +54,8 @@ func (r *Replica) Stop() error {
   return nil
 }
 
-func NewReplica(db ethdb.Database, config *eth.Config, ctx *node.ServiceContext, kafkaSourceBroker []string, kafkaTopic string) (*Replica, error) {
+// TODO ADD THE CONFIGURATION HERE FOR TRIGGERING POSTBACK
+func NewReplica(db ethdb.Database, config *eth.Config, ctx *node.ServiceContext, kafkaSourceBroker []string, kafkaTopic, transactionTopic string) (*Replica, error) {
   offsetBytes, err := db.Get([]byte(fmt.Sprintf("cdc-log-%v-offset", kafkaTopic)))
   var offset int64
   var bytesRead int
@@ -69,6 +72,14 @@ func NewReplica(db ethdb.Database, config *eth.Config, ctx *node.ServiceContext,
   )
   if err != nil { return nil, err }
   fmt.Printf("Pre: %v\n", time.Now())
+  // TODO : CREATE THE PRODUCER HERE with if conditionals
+  transactionProducer, err := NewKafkaTransactionProducerFromURLs(
+    kafkaSourceBroker,
+    transactionTopic,
+  )
+  if err != nil {
+    return nil, err
+  }
   go func() {
     for operation := range consumer.Messages() {
       operation.Apply(db)
@@ -82,9 +93,9 @@ func NewReplica(db ethdb.Database, config *eth.Config, ctx *node.ServiceContext,
   if err != nil {
     return nil, err
   }
-  bc, err := core.NewBlockChain(db, &core.CacheConfig{Disabled: true}, chainConfig, engine, vm.Config{})
+  bc, err := core.NewBlockChain(db, &core.CacheConfig{Disabled: true}, chainConfig, engine, vm.Config{}, nil)
   if err != nil {
     return nil, err
   }
-  return &Replica{db, hc, chainConfig, bc}, nil
+  return &Replica{db, hc, chainConfig, bc, transactionProducer}, nil
 }
