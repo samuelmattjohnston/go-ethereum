@@ -13,6 +13,10 @@ type BatchWrapper struct {
   batchid uuid.UUID
 }
 
+func (batch *BatchWrapper) BatchId() ([]byte) {
+  return batch.batchid[:]
+}
+
 func (batch *BatchWrapper) Put(key, value []byte) (error) {
   if batch.writeStream != nil {
     data, err := rlp.EncodeToBytes(KeyValue{key, value})
@@ -43,7 +47,12 @@ func (batch *BatchWrapper) Write() error {
   if batch.writeStream != nil {
     op, err := WriteOperation(batch)
     if err != nil { return err }
-    if err = batch.writeStream.Emit(op); err != nil {
+    for _, bop := range batch.operations {
+      if err := batch.writeStream.Emit(bop.Bytes()); err != nil {
+        return err
+      }
+    }
+    if err := batch.writeStream.Emit(op.Bytes()); err != nil {
       return err
     }
   }
@@ -64,7 +73,7 @@ func (db *DBWrapper) Put(key, value []byte) error {
   if db.writeStream != nil {
     op, err := PutOperation(key, value)
     if err != nil { return err }
-    if err = db.writeStream.Emit(op); err != nil {
+    if err = db.writeStream.Emit(op.Bytes()); err != nil {
       return err
     }
   }
@@ -74,7 +83,7 @@ func (db *DBWrapper) Put(key, value []byte) error {
 func (db *DBWrapper) Get(key []byte) ([]byte, error) {
   if db.readStream != nil {
     op, _ := GetOperation(key)
-    db.readStream.Emit(op)
+    db.readStream.Emit(op.Bytes())
   }
   return db.db.Get(key)
 }
@@ -82,7 +91,7 @@ func (db *DBWrapper) Get(key []byte) ([]byte, error) {
 func (db *DBWrapper) Has(key []byte) (bool, error) {
   if db.readStream != nil {
     op, _ := HasOperation(key)
-    db.readStream.Emit(op)
+    db.readStream.Emit(op.Bytes())
   }
   return db.db.Has(key)
 }
@@ -91,7 +100,7 @@ func (db *DBWrapper) Delete(key []byte) error {
   if db.writeStream != nil {
     op, err := DeleteOperation(key)
     if err != nil { return err }
-    if err = db.writeStream.Emit(op); err != nil {
+    if err = db.writeStream.Emit(op.Bytes()); err != nil {
       return err
     }
   }
