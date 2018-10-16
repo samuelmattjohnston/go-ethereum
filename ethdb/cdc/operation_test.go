@@ -3,7 +3,8 @@ package cdc_test
 import (
   "github.com/ethereum/go-ethereum/ethdb"
   "github.com/ethereum/go-ethereum/ethdb/cdc"
-  // "github.com/ethereum/go-ethereum/rlp"
+  "github.com/pborman/uuid"
+  "github.com/ethereum/go-ethereum/rlp"
   "testing"
   // "log"
   "bytes"
@@ -12,18 +13,22 @@ import (
 var test_values = []string{"", "a", "1251", "\x00123\x00"}
 
 type MockBatch struct {
-  KeyValues []cdc.KeyValue
+  operations []cdc.BatchOperation
+  batchid uuid.UUID
 }
 
 func (batch *MockBatch) Put(key, value []byte) (error) {
-  batch.KeyValues = append(batch.KeyValues, cdc.KeyValue{key, value})
+  data, err := rlp.EncodeToBytes(cdc.KeyValue{key, value})
+  if err != nil { return err }
+  op := cdc.BatchOperation{cdc.OpPut, batch.batchid, data}
+  batch.operations = append(batch.operations, op)
   return nil
 }
 
 func (batch *MockBatch) ValueSize() int {
   size := 0
-  for _, kv := range batch.KeyValues {
-    size += len(kv.Value)
+  for _, op := range batch.operations {
+    size += len(op.Data)
   }
   return size
 }
@@ -32,9 +37,13 @@ func (batch *MockBatch) Write() error { return nil }
 
 func (batch *MockBatch) Reset() { return }
 
-func (batch *MockBatch) Delete(key []byte) error { return nil }
+func (batch *MockBatch) Delete(key []byte) error {
+  op := cdc.BatchOperation{cdc.OpDelete, batch.batchid, key}
+  batch.operations = append(batch.operations, op)
+  return nil
+}
 
-func (batch *MockBatch) GetKeyValues() []cdc.KeyValue { return batch.KeyValues }
+func (batch *MockBatch) GetOperations() []cdc.BatchOperation { return batch.operations }
 
 func opsEqual(op1, op2 *cdc.Operation) (bool) {
   if op1.Op != op2.Op {
@@ -94,7 +103,7 @@ func TestEncodeDeleteOperation(t *testing.T) {
   }
 }
 func TestEncodeWriteOperation(t *testing.T) {
-  batch := &MockBatch{[]cdc.KeyValue{}}
+  batch := &MockBatch{[]cdc.BatchOperation{}, uuid.NewRandom()}
   for _, v := range test_values {
     batch.Put([]byte(v), []byte(v))
   }

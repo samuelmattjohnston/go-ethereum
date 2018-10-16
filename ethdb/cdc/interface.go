@@ -6,7 +6,7 @@ import (
 
 type Batch interface {
   ethdb.Batch
-  GetKeyValues() []KeyValue
+  GetOperations() []BatchOperation
 }
 
 type LogProducer interface {

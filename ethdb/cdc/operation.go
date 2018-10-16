@@ -5,6 +5,7 @@ import (
   "encoding/binary"
   "github.com/ethereum/go-ethereum/ethdb"
   "github.com/ethereum/go-ethereum/rlp"
+  "github.com/pborman/uuid"
   "errors"
 )
 
@@ -39,6 +40,12 @@ func (kvs KVs) String() string {
   return output
 }
 
+type BatchOperation struct {
+  Op byte
+  Batch uuid.UUID
+  Data []byte
+}
+
 type Operation struct {
   Op byte
   Data []byte
@@ -71,10 +78,17 @@ func (op *Operation) Apply(db ethdb.Database) error {
     updateOffset(db, op)
   case OpWrite:
     batch := db.NewBatch()
-    var puts []KeyValue
-    rlp.DecodeBytes(op.Data, &puts)
-    for _, kv := range puts {
-      if err := batch.Put(kv.Key, kv.Value); err != nil { return err }
+    var operations []BatchOperation
+    if err := rlp.DecodeBytes(op.Data, &operations); err != nil { return err }
+    for _, bop := range operations {
+      switch bop.Op {
+      case OpPut:
+        kv := &KeyValue{}
+        if err := rlp.DecodeBytes(bop.Data, kv); err != nil { return err }
+        if err := batch.Put(kv.Key, kv.Value); err != nil { return err }
+      case OpDelete:
+        if err := batch.Delete(bop.Data); err != nil { return err }
+      }
     }
     updateOffset(batch, op)
     if err := batch.Write(); err != nil { return err }
@@ -139,7 +153,7 @@ func DeleteOperation(key []byte) (*Operation, error) {
 func WriteOperation(batch Batch) (*Operation, error) {
   op := &Operation{}
   op.Op = OpWrite
-  data, err := rlp.EncodeToBytes(batch.GetKeyValues())
+  data, err := rlp.EncodeToBytes(batch.GetOperations())
   if err != nil { return nil, err }
   op.Data = data
   return op, nil
