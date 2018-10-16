@@ -169,8 +169,17 @@ func TestBatchWrapper(t *testing.T) {
     if op.Op != cdc.OpWrite {
       t.Errorf("Got unexpected operation type: %v", op.Op)
     }
+    operations := []cdc.BatchOperation{}
+    rlp.DecodeBytes(op.Data, &operations)
     kvs := []cdc.KeyValue{}
-    rlp.DecodeBytes(op.Data, &kvs)
+    for _, bop := range operations {
+      if bop.Op != cdc.OpPut {
+        t.Errorf("Expected put operation")
+      }
+      kv := &cdc.KeyValue{}
+      if err := rlp.DecodeBytes(bop.Data, kv); err != nil { t.Errorf(err.Error()) }
+      kvs = append(kvs, *kv)
+    }
     if bytes.Compare(kvs[0].Key, []byte("hello")) != 0 || bytes.Compare(kvs[0].Value, []byte("world")) != 0 {
       t.Errorf("Unexpected Key Value Pair: %v, %v", kvs[0].Key, kvs[0].Value)
     }

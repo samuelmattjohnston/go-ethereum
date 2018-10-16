@@ -2,17 +2,23 @@ package cdc
 import (
   "github.com/ethereum/go-ethereum/ethdb"
   "github.com/syndtr/goleveldb/leveldb/iterator"
+  "github.com/ethereum/go-ethereum/rlp"
+  "github.com/pborman/uuid"
 )
 
 type BatchWrapper struct {
   batch ethdb.Batch
   writeStream LogProducer
-  keyValues []KeyValue
+  operations []BatchOperation
+  batchid uuid.UUID
 }
 
 func (batch *BatchWrapper) Put(key, value []byte) (error) {
   if batch.writeStream != nil {
-    batch.keyValues = append(batch.keyValues, KeyValue{key, value})
+    data, err := rlp.EncodeToBytes(KeyValue{key, value})
+    if err != nil { return err }
+    op := BatchOperation{OpPut, batch.batchid, data}
+    batch.operations = append(batch.operations, op)
   }
   return batch.batch.Put(key, value)
 }
@@ -23,11 +29,8 @@ func (batch *BatchWrapper) Reset() {
 
 func (batch *BatchWrapper) Delete(key []byte) (error) {
   if batch.writeStream != nil {
-    op, err := DeleteOperation(key)
-    if err != nil { return err }
-    if err = batch.writeStream.Emit(op); err != nil {
-      return err
-    }
+    op := BatchOperation{OpDelete, batch.batchid, key}
+    batch.operations = append(batch.operations, op)
   }
   return batch.batch.Delete(key)
 }
@@ -47,8 +50,8 @@ func (batch *BatchWrapper) Write() error {
   return batch.batch.Write()
 }
 
-func (batch *BatchWrapper) GetKeyValues() []KeyValue {
-  return batch.keyValues
+func (batch *BatchWrapper) GetOperations() []BatchOperation {
+  return batch.operations
 }
 
 type DBWrapper struct {
@@ -107,7 +110,7 @@ func (db *DBWrapper) Close() {
 
 func (db *DBWrapper) NewBatch() ethdb.Batch {
   dbBatch := db.db.NewBatch()
-  return &BatchWrapper{dbBatch, db.writeStream, []KeyValue{}}
+  return &BatchWrapper{dbBatch, db.writeStream, []BatchOperation{}, uuid.NewRandom()}
 }
 
 func (db *DBWrapper) NewIterator() iterator.Iterator {

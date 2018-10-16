@@ -35,6 +35,7 @@ func TestConsumer(t *testing.T) {
     Value: op.Bytes(),
   }
   consumerPartition.YieldMessage(message)
+  go func() { <-logConsumer.Ready() }()
   receiveOp := <-logConsumer.Messages()
   if receiveOp.Op != cdc.OpHas {
     t.Errorf("Op has unexpected type %v", receiveOp.Op)
