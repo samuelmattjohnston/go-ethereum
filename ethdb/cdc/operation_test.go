@@ -17,6 +17,10 @@ type MockBatch struct {
   batchid uuid.UUID
 }
 
+func (batch *MockBatch) BatchId() ([]byte) {
+  return batch.batchid[:]
+}
+
 func (batch *MockBatch) Put(key, value []byte) (error) {
   data, err := rlp.EncodeToBytes(cdc.KeyValue{key, value})
   if err != nil { return err }
@@ -111,6 +115,11 @@ func TestEncodeWriteOperation(t *testing.T) {
   if err != nil {
     t.Fatalf("batch write failed: %v", err)
   }
+  data, err := rlp.EncodeToBytes(batch.operations)
+  if err != nil {
+    t.Fatalf(err.Error())
+  }
+  op.Data = append(op.Data, data...)
   checkOperations(op, t)
   db := ethdb.NewMemDatabase()
   err = op.Apply(db)

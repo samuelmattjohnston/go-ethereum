@@ -46,6 +46,25 @@ type BatchOperation struct {
   Data []byte
 }
 
+func (op *BatchOperation) Bytes() ([]byte) {
+  data := []byte{255, op.Op}
+  data = append(data, op.Batch...)
+  return append(data, op.Data...)
+}
+
+func BatchOperationFromBytes(data []byte, topic string, offset int64) (BatchOperation, error) {
+  bop := BatchOperation{}
+  if data[0] != 255 {
+    return bop, errors.New("Batch operations must begin with 0xFF")
+  }
+  bop.Op = data[1]
+  bop.Batch = make(uuid.UUID, 16)
+  copy(bop.Batch[:], data[2:18])
+  bop.Data = data[18:]
+  return bop, nil
+}
+
+
 type Operation struct {
   Op byte
   Data []byte
@@ -79,7 +98,7 @@ func (op *Operation) Apply(db ethdb.Database) error {
   case OpWrite:
     batch := db.NewBatch()
     var operations []BatchOperation
-    if err := rlp.DecodeBytes(op.Data, &operations); err != nil { return err }
+    if err := rlp.DecodeBytes(op.Data[16:], &operations); err != nil { return err }
     for _, bop := range operations {
       switch bop.Op {
       case OpPut:
@@ -153,9 +172,7 @@ func DeleteOperation(key []byte) (*Operation, error) {
 func WriteOperation(batch Batch) (*Operation, error) {
   op := &Operation{}
   op.Op = OpWrite
-  data, err := rlp.EncodeToBytes(batch.GetOperations())
-  if err != nil { return nil, err }
-  op.Data = data
+  op.Data = batch.BatchId()
   return op, nil
 }
 

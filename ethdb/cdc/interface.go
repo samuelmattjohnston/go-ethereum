@@ -6,11 +6,11 @@ import (
 
 type Batch interface {
   ethdb.Batch
-  GetOperations() []BatchOperation
+  BatchId() []byte
 }
 
 type LogProducer interface {
-  Emit(*Operation) error
+  Emit([]byte) error
   Close()
 }
 

@@ -18,7 +18,7 @@ func TestEmit(t *testing.T) {
   if err != nil {
     t.Fatalf(err.Error())
   }
-  producer.Emit(op)
+  producer.Emit(op.Bytes())
 }
 
 func TestConsumer(t *testing.T) {
