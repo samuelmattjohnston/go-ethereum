@@ -107,10 +107,14 @@ func (op *Operation) Apply(db ethdb.Database) error {
         if err := batch.Put(kv.Key, kv.Value); err != nil { return err }
       case OpDelete:
         if err := batch.Delete(bop.Data); err != nil { return err }
+      default:
+        fmt.Printf("Unsupported operation: %#x", bop.Op)
       }
     }
     updateOffset(batch, op)
     if err := batch.Write(); err != nil { return err }
+  default:
+    fmt.Printf("Unknown operation: %v \n", op)
   }
   return nil
 }
@@ -148,9 +152,11 @@ func OperationFromBytes(data []byte, topic string, offset int64) (*Operation, er
   if len(data) == 0 {
     return nil, errors.New("OperationFromBytes requires a []byte of length > 0")
   }
+  opData := make([]byte, len(data[1:]))
+  copy(opData[:], data[1:])
   return &Operation{
     Op: data[0],
-    Data: data[1:],
+    Data: opData,
     Topic: topic,
     Offset: offset,
   }, nil

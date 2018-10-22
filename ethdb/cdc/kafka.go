@@ -22,6 +22,7 @@ func (producer *KafkaLogProducer) Emit(data []byte) error {
   case err := <-producer.producer.Errors():
     // TODO: If we get an error here, that indicates a problem with an earlier
     // write.
+    log.Printf("Error emitting: %v", err.Error())
     return err
   }
   return nil
@@ -57,14 +58,16 @@ func (consumer *KafkaLogConsumer) Messages() <-chan *Operation {
   go func() {
     for input := range inputChannel {
       fmt.Printf("Offset: %v/%v\n", input.Offset, consumer.consumer.HighWaterMarkOffset())
-      if consumer.consumer.HighWaterMarkOffset() - input.Offset <= 1 {
-        if consumer.ready != nil {
+      if consumer.ready != nil {
+        if consumer.consumer.HighWaterMarkOffset() - input.Offset <= 1 {
           consumer.ready <- struct{}{}
           consumer.ready = nil
         }
       }
       if input.Value[0] == 255 {
-        bop, err := BatchOperationFromBytes(input.Value, input.Topic, input.Offset)
+        batchValue := make([]byte, len(input.Value))
+        copy(batchValue[:], input.Value[:])
+        bop, err := BatchOperationFromBytes(batchValue, input.Topic, input.Offset)
         if err != nil {
           log.Printf("Message(topic=%v, partition=%v, offset=%v) is not a valid operation: %v\n", input.Topic, input.Partition, input.Offset, err.Error())
         }
@@ -76,12 +79,17 @@ func (consumer *KafkaLogConsumer) Messages() <-chan *Operation {
       } else {
         op, err := OperationFromBytes(input.Value, input.Topic, input.Offset)
         if op.Op == OpWrite {
-          data, err := rlp.EncodeToBytes(batches[string(op.Data)])
-          if err != nil {
-            log.Printf("Failed to encode batch operation: %v", err)
+          if batch, ok := batches[string(op.Data)]; ok {
+            data, err := rlp.EncodeToBytes(batch)
+            if err != nil {
+              log.Printf("Failed to encode batch operation: %v", err)
+            }
+            delete(batches, string(op.Data))
+            op.Data = append(op.Data, data...)
+          } else {
+            log.Printf("Could not find matching batch: %#x", op.Data)
+            continue
           }
-          delete(batches, string(op.Data))
-          op.Data = append(op.Data, data...)
         }
         if err != nil {
           log.Printf("Message(topic=%v, partition=%v, offset=%v) is not a valid operation: %v\n", input.Topic, input.Partition, input.Offset, err.Error())
