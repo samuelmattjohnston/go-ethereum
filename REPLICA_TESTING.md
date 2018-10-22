@@ -5,7 +5,7 @@
     ./geth init --datadir=/tmp/replicatest2 ../../genesis.json
 
 
-    ./geth --kafka.broker=localhost:9092 --mine --miner.etherbase 5409ed021d9299bf6814279a6a1411a7e866a631 --datadir=/tmp/replicatest/ --networkid=19870212 --miner.threads 1 --port 30304 --syncmode full
+    ./geth --kafka.broker=localhost:9092 --mine --miner.etherbase 5409ed021d9299bf6814279a6a1411a7e866a631 --datadir=/tmp/replicatest/ --networkid=19870212 --miner.threads 1 --port 30304 --syncmode full --gcmode archive
     ./geth replica --kafka.broker=localhost:9092 --datadir=/tmp/replicatest2/
 
 
