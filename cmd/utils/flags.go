@@ -592,7 +592,7 @@ var (
 	}
 	KafkaLogTopicFlag = cli.StringFlag{
 		Name: "kafka.topic",
-		Usage: "Kafka broker replication topic name",
+		Usage: "Kafka broker hostname and port",
 		Value: "geth", // TODO: Maybe the default could be based on the Ethereum network we connect to
 	}
 	KafkaTransactionTopicFlag = cli.StringFlag{

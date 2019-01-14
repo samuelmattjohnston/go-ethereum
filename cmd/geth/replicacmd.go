@@ -77,7 +77,7 @@ system and acts as an RPC node based on the replicated data.
 			DatasetsInMem:  1,
 			DatasetsOnDisk: 2,
 		},
-		NetworkId:     19870212,
+		NetworkId:     1,
 		LightPeers:    0,
 		DatabaseCache: 0,
 		TrieDirtyCache:     0,
