@@ -80,7 +80,7 @@ system and acts as an RPC node based on the replicated data.
 		NetworkId:     19870212,
 		LightPeers:    0,
 		DatabaseCache: 0,
-		TrieCache:     0,
+		TrieDirtyCache:     0,
 		TrieTimeout:   5 * time.Minute,
 		// GasPrice:      big.NewInt(18 * params.Shannon),
 

@@ -98,12 +98,12 @@ func (backend *ReplicaBackend) GetTd(blockHash common.Hash) *big.Int {
   return backend.hc.GetTdByHash(blockHash)
 }
 	// Use core.NewEVMContext and vm.NewEVM - Will need custom ChainContext implementation
-func (backend *ReplicaBackend) GetEVM(ctx context.Context, msg core.Message, state *state.StateDB, header *types.Header, vmCfg vm.Config) (*vm.EVM, func() error, error) {
+func (backend *ReplicaBackend) GetEVM(ctx context.Context, msg core.Message, state *state.StateDB, header *types.Header) (*vm.EVM, func() error, error) {
   state.SetBalance(msg.From(), math.MaxBig256)
   vmError := func() error { return nil }
 
   context := core.NewEVMContext(msg, header, backend.bc, nil)
-  return vm.NewEVM(context, state, backend.chainConfig, vmCfg), vmError, nil
+  return vm.NewEVM(context, state, backend.chainConfig, *backend.bc.GetVMConfig()), vmError, nil
 
 }
 
