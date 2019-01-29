@@ -147,7 +147,7 @@ func makeReplicaNode(ctx *cli.Context) (*node.Node, gethConfig) {
 	utils.SetShhConfig(ctx, stack, &cfg.Shh)
 	utils.SetDashboardConfig(ctx, &cfg.Dashboard)
 	stack.Register(func (sctx *node.ServiceContext) (node.Service, error) {
-		chainDb, err := eth.CreateRawDB(sctx, &cfg.Eth, "replicachaindata")
+		chainDb, err := eth.CreateRawDB(sctx, &cfg.Eth, "chaindata")
 		if err != nil {
 			utils.Fatalf("Could not open database: %v", err)
 		}
