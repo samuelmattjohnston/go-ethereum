@@ -2,6 +2,7 @@ package replica
 
 import (
   "context"
+  "encoding/binary"
   "errors"
   "fmt"
   "math/big"
@@ -10,28 +11,40 @@ import (
   "github.com/ethereum/go-ethereum/event"
   "github.com/ethereum/go-ethereum/accounts"
   "github.com/ethereum/go-ethereum/common"
+  "github.com/ethereum/go-ethereum/common/bitutil"
   "github.com/ethereum/go-ethereum/common/math"
   "github.com/ethereum/go-ethereum/rpc"
   "github.com/ethereum/go-ethereum/core"
+  "github.com/ethereum/go-ethereum/core/bloombits"
   "github.com/ethereum/go-ethereum/core/types"
   "github.com/ethereum/go-ethereum/core/vm"
   "github.com/ethereum/go-ethereum/core/state"
   "github.com/ethereum/go-ethereum/core/rawdb"
   "github.com/ethereum/go-ethereum/params"
+  "time"
 )
 
 type ReplicaBackend struct {
   db ethdb.Database
+  indexDb ethdb.Database
   hc *core.HeaderChain
   chainConfig *params.ChainConfig
   bc *core.BlockChain
   transactionProducer TransactionProducer
+  eventMux *event.TypeMux
+  dl *downloader.Downloader
+  bloomRequests chan chan *bloombits.Retrieval
+  shutdownChan chan bool
 }
 
 	// General Ethereum API
 	// Block synchronization seems to happen at the downloader under normaly circumstances
 func (backend *ReplicaBackend) Downloader() *downloader.Downloader {								// Seems to be used to get sync progress, cancel downloads {
-  return nil
+  if backend.dl == nil {
+    backend.dl = downloader.New(downloader.FullSync, backend.db, backend.eventMux, backend.bc, nil, func(id string){})
+    backend.dl.Terminate()
+  }
+  return backend.dl
 }
 func (backend *ReplicaBackend) ProtocolVersion() int {										// Static? {
   return 63
@@ -43,7 +56,7 @@ func (backend *ReplicaBackend) ChainDb() ethdb.Database {									// Just return
   return backend.db
 }
 func (backend *ReplicaBackend) EventMux() *event.TypeMux {									// Unused, afaict {
-  return nil
+  return backend.eventMux
 }
 func (backend *ReplicaBackend) AccountManager() *accounts.Manager {								// We don't want the read replicas to support accounts, so we'll want to minimize this {
   return accounts.NewManager()
@@ -66,6 +79,10 @@ func (backend *ReplicaBackend) HeaderByNumber(ctx context.Context, blockNr rpc.B
 	}
 	return backend.hc.GetHeaderByNumber(uint64(blockNr)), nil
 } // Get block hash using HeaderByNumber, then get block with GetBlock() {
+
+func (backend *ReplicaBackend) HeaderByHash(ctx context.Context, blockHash common.Hash) (*types.Header, error) {
+  return backend.hc.GetHeaderByHash(blockHash), nil
+}
 
 func (backend *ReplicaBackend) BlockByNumber(ctx context.Context, blockNr rpc.BlockNumber) (*types.Block, error) {
   if blockNr == rpc.LatestBlockNumber {
@@ -104,18 +121,49 @@ func (backend *ReplicaBackend) GetEVM(ctx context.Context, msg core.Message, sta
 
   context := core.NewEVMContext(msg, header, backend.bc, nil)
   return vm.NewEVM(context, state, backend.chainConfig, *backend.bc.GetVMConfig()), vmError, nil
+}
 
+func (backend *ReplicaBackend) GetLogs(ctx context.Context, blockHash common.Hash) ([][]*types.Log, error) {
+  receipts := backend.bc.GetReceiptsByHash(blockHash)
+  if receipts == nil {
+    return nil, nil
+  }
+  logs := make([][]*types.Log, len(receipts))
+  for i, receipt := range receipts {
+    logs[i] = receipt.Logs
+  }
+  return logs, nil
+}
+
+func (backend *ReplicaBackend) SubscribeLogsEvent(ch chan<- []*types.Log) event.Subscription {
+  return event.NewSubscription(func(<-chan struct{}) error {
+    return nil
+  })
+  // return backend.bc.SubscribeLogsEvent(ch)
+}
+
+func (backend *ReplicaBackend) SubscribeRemovedLogsEvent(ch chan<- core.RemovedLogsEvent) event.Subscription {
+  return event.NewSubscription(func(<-chan struct{}) error {
+    return nil
+  })
+  // return backend.bc.SubscribeRemovedLogsEvent(ch)
 }
 
 	// I Don't think these are really need for RPC calls. Maybe stub them out?
 func (backend *ReplicaBackend) SubscribeChainEvent(ch chan<- core.ChainEvent) event.Subscription {
-  return nil
+  return event.NewSubscription(func(<-chan struct{}) error {
+    return nil
+  })
 }
 func (backend *ReplicaBackend) SubscribeChainHeadEvent(ch chan<- core.ChainHeadEvent) event.Subscription {
-  return nil
+  return event.NewSubscription(func(<-chan struct{}) error {
+    return nil
+  })
 }
 func (backend *ReplicaBackend) SubscribeChainSideEvent(ch chan<- core.ChainSideEvent) event.Subscription {
-  return nil
+  return event.NewSubscription(func(<-chan struct{}) error {
+    return nil
+  })
 }
 
 	// TxPool API
@@ -127,6 +175,56 @@ func (backend *ReplicaBackend) SendTx(ctx context.Context, signedTx *types.Trans
   }
   fmt.Printf("%v", backend.transactionProducer)
   return backend.transactionProducer.Emit(signedTx)
+}
+
+func (backend *ReplicaBackend) BloomStatus() (uint64, uint64) {
+  var sections uint64
+  data, _ := backend.indexDb.Get([]byte("count"))
+	if len(data) == 8 {
+		sections = binary.BigEndian.Uint64(data)
+	}
+  return params.BloomBitsBlocks, sections
+}
+
+func (backend *ReplicaBackend) ServiceFilter(ctx context.Context, session *bloombits.MatcherSession) {
+  bloomFilterThreads := 3
+  bloomServiceThreads := 16
+  bloomBatch := 16
+  bloomBlockBits := uint64(4096)
+  bloomWait := time.Duration(0)
+  if backend.bloomRequests == nil {
+    backend.bloomRequests = make(chan chan *bloombits.Retrieval)
+  	for i := 0; i < bloomServiceThreads; i++ {
+  		go func(sectionSize uint64) {
+  			for {
+  				select {
+  				case <-backend.shutdownChan:
+  					return
+
+  				case request := <-backend.bloomRequests:
+  					task := <-request
+  					task.Bitsets = make([][]byte, len(task.Sections))
+  					for i, section := range task.Sections {
+  						head := rawdb.ReadCanonicalHash(backend.db, (section+1)*sectionSize-1)
+  						if compVector, err := rawdb.ReadBloomBits(backend.db, task.Bit, section, head); err == nil {
+  							if blob, err := bitutil.DecompressBytes(compVector, int(sectionSize/8)); err == nil {
+  								task.Bitsets[i] = blob
+  							} else {
+  								task.Error = err
+  							}
+  						} else {
+  							task.Error = err
+  						}
+  					}
+  					request <- task
+  				}
+  			}
+  		}(bloomBlockBits)
+  	}
+  }
+  for i := 0; i < bloomFilterThreads; i++ {
+		go session.Multiplex(bloomBatch, bloomWait, backend.bloomRequests)
+	}
 }
 
 	// Read replicas won't have the p2p functionality, so these will be noops
@@ -159,7 +257,9 @@ func (backend *ReplicaBackend) TxPoolContent() (map[common.Address]types.Transac
 
 	// Not sure how to stub out subscriptions
 func (backend *ReplicaBackend) SubscribeNewTxsEvent(chan<- core.NewTxsEvent) event.Subscription {
-  return nil
+  return event.NewSubscription(func(<-chan struct{}) error {
+    return nil
+  })
 }
 
 func (backend *ReplicaBackend) ChainConfig() *params.ChainConfig {
@@ -173,3 +273,8 @@ func (backend *ReplicaBackend) CurrentBlock() *types.Block {
   latestHash := rawdb.ReadHeadBlockHash(backend.db)
   return backend.bc.GetBlockByHash(latestHash)
 }
+
+
+
+
+//

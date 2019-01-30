@@ -7,11 +7,14 @@ import (
   "github.com/ethereum/go-ethereum/rpc"
   // "github.com/ethereum/go-ethereum/node"
   "github.com/ethereum/go-ethereum/eth"
+  "github.com/ethereum/go-ethereum/eth/filters"
   "github.com/ethereum/go-ethereum/ethdb"
   "github.com/ethereum/go-ethereum/ethdb/cdc"
+  "github.com/ethereum/go-ethereum/event"
   "github.com/ethereum/go-ethereum/node"
   "github.com/ethereum/go-ethereum/core"
   "github.com/ethereum/go-ethereum/core/vm"
+  "github.com/ethereum/go-ethereum/core/rawdb"
   "github.com/ethereum/go-ethereum/internal/ethapi"
   "github.com/ethereum/go-ethereum/params"
   "github.com/Shopify/sarama"
@@ -25,19 +28,30 @@ type Replica struct {
   chainConfig *params.ChainConfig
   bc *core.BlockChain
   transactionProducer TransactionProducer
+  shutdownChan chan bool
 }
 
 func (r *Replica) Protocols() []p2p.Protocol {
   return []p2p.Protocol{}
 }
 func (r *Replica) APIs() []rpc.API {
-  return append(ethapi.GetAPIs(&ReplicaBackend{
+  backend := &ReplicaBackend{
     db: r.db,
+    indexDb: ethdb.NewTable(r.db, string(rawdb.BloomBitsIndexPrefix)),
     hc: r.hc,
     chainConfig: r.chainConfig,
     bc: r.bc,
     transactionProducer: r.transactionProducer,
-  }),
+    eventMux: new(event.TypeMux),
+    shutdownChan: r.shutdownChan,
+  }
+  return append(ethapi.GetAPIs(backend),
+  rpc.API{
+    Namespace: "eth",
+    Version:   "1.0",
+    Service:   filters.NewPublicFilterAPI(backend, false),
+    Public:    true,
+  },
   rpc.API{
     Namespace: "net",
     Version:   "1.0",
@@ -97,5 +111,5 @@ func NewReplica(db ethdb.Database, config *eth.Config, ctx *node.ServiceContext,
   if err != nil {
     return nil, err
   }
-  return &Replica{db, hc, chainConfig, bc, transactionProducer}, nil
+  return &Replica{db, hc, chainConfig, bc, transactionProducer, make(chan bool)}, nil
 }
