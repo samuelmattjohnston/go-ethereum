@@ -95,7 +95,7 @@ system and acts as an RPC node based on the replicated data.
 		HTTPHost:         "0.0.0.0",
 		HTTPPort:         node.DefaultHTTPPort,
 		HTTPModules:      []string{"net", "web3", "replica"},
-		HTTPVirtualHosts: []string{"localhost"},
+		HTTPVirtualHosts: []string{"*"},
 		WSPort:           node.DefaultWSPort,
 		WSModules:        []string{"net", "web3"},
 		P2P: p2p.Config{
