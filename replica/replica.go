@@ -20,6 +20,8 @@ import (
   "github.com/Shopify/sarama"
   "fmt"
   "time"
+  "strings"
+  "strconv"
 )
 
 type Replica struct {
@@ -70,14 +72,24 @@ func (r *Replica) Stop() error {
 
 // TODO ADD THE CONFIGURATION HERE FOR TRIGGERING POSTBACK
 func NewReplica(db ethdb.Database, config *eth.Config, ctx *node.ServiceContext, kafkaSourceBroker []string, kafkaTopic, transactionTopic string) (*Replica, error) {
-  offsetBytes, err := db.Get([]byte(fmt.Sprintf("cdc-log-%v-offset", kafkaTopic)))
+  topicParts := strings.Split(kafkaTopic, ":")
+  kafkaTopic = topicParts[0]
   var offset int64
-  var bytesRead int
-  if err != nil || len(offsetBytes) == 0 {
-    offset = sarama.OffsetOldest
+  if len(topicParts) > 1 {
+    offsetInt, err := strconv.Atoi(topicParts[1])
+    if err != nil {
+      return nil, fmt.Errorf("Error parsing '%v' as integer: %v", topicParts[1], err.Error())
+    }
+    offset = int64(offsetInt)
   } else {
-    offset, bytesRead = binary.Varint(offsetBytes)
-    if bytesRead <= 0 { return nil, errors.New("Offset buffer too small") }
+    offsetBytes, err := db.Get([]byte(fmt.Sprintf("cdc-log-%v-offset", kafkaTopic)))
+    var bytesRead int
+    if err != nil || len(offsetBytes) == 0 {
+      offset = sarama.OffsetOldest
+    } else {
+      offset, bytesRead = binary.Varint(offsetBytes)
+      if bytesRead <= 0 { return nil, errors.New("Offset buffer too small") }
+    }
   }
   consumer, err := cdc.NewKafkaLogConsumerFromURLs(
     kafkaSourceBroker,
