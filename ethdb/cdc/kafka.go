@@ -4,7 +4,6 @@ import (
   "github.com/ethereum/go-ethereum/rlp"
   "github.com/Shopify/sarama"
   "log"
-  "fmt"
 )
 
 type KafkaLogProducer struct {
@@ -57,7 +56,6 @@ func (consumer *KafkaLogConsumer) Messages() <-chan *Operation {
   batches := make(map[string][]BatchOperation)
   go func() {
     for input := range inputChannel {
-      fmt.Printf("Offset: %v/%v\n", input.Offset, consumer.consumer.HighWaterMarkOffset())
       if consumer.ready != nil {
         if consumer.consumer.HighWaterMarkOffset() - input.Offset <= 1 {
           consumer.ready <- struct{}{}
@@ -87,7 +85,7 @@ func (consumer *KafkaLogConsumer) Messages() <-chan *Operation {
             delete(batches, string(op.Data))
             op.Data = append(op.Data, data...)
           } else {
-            log.Printf("Could not find matching batch: %#x", op.Data)
+            log.Printf("Could not find matching batch: %#x, (%v known)", op.Data, len(batches))
             continue
           }
         }

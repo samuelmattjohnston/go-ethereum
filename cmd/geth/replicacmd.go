@@ -17,7 +17,7 @@
 package main
 
 import (
-	"fmt"
+	// "fmt"
 	"time"
 	"github.com/ethereum/go-ethereum/cmd/utils"
 	"github.com/ethereum/go-ethereum/core"
@@ -111,7 +111,6 @@ system and acts as an RPC node based on the replicated data.
 func replica(ctx *cli.Context) error {
 	node, _ := makeReplicaNode(ctx)
 	utils.StartNode(node)
-	fmt.Println("Hello world")
 	node.Wait()
 	return nil
 }
