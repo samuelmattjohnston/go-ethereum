@@ -35,6 +35,7 @@ type ReplicaBackend struct {
   dl *downloader.Downloader
   bloomRequests chan chan *bloombits.Retrieval
   shutdownChan chan bool
+  accountManager *accounts.Manager
 }
 
 	// General Ethereum API
@@ -59,7 +60,10 @@ func (backend *ReplicaBackend) EventMux() *event.TypeMux {									// Unused, af
   return backend.eventMux
 }
 func (backend *ReplicaBackend) AccountManager() *accounts.Manager {								// We don't want the read replicas to support accounts, so we'll want to minimize this {
-  return accounts.NewManager()
+  if backend.accountManager == nil {
+    backend.accountManager = accounts.NewManager()
+  }
+  return backend.accountManager
 }
 
 	// BlockChain API
