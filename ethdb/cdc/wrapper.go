@@ -47,13 +47,15 @@ func (batch *BatchWrapper) Write() error {
   if batch.writeStream != nil {
     op, err := WriteOperation(batch)
     if err != nil { return err }
-    for _, bop := range batch.operations {
-      if err := batch.writeStream.Emit(bop.Bytes()); err != nil {
+    if len(batch.operations) > 0 {
+      for _, bop := range batch.operations {
+        if err := batch.writeStream.Emit(bop.Bytes()); err != nil {
+          return err
+        }
+      }
+      if err := batch.writeStream.Emit(op.Bytes()); err != nil {
         return err
       }
-    }
-    if err := batch.writeStream.Emit(op.Bytes()); err != nil {
-      return err
     }
   }
   return batch.batch.Write()
