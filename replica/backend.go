@@ -48,7 +48,7 @@ func (backend *ReplicaBackend) Downloader() *downloader.Downloader {								// S
   return backend.dl
 }
 func (backend *ReplicaBackend) ProtocolVersion() int {										// Static? {
-  return 63
+  return int(backend.chainConfig.ChainID.Int64())
 }
 func (backend *ReplicaBackend) SuggestPrice(ctx context.Context) (*big.Int, error) {
   return new(big.Int), nil

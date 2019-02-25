@@ -57,9 +57,16 @@ func (r *Replica) APIs() []rpc.API {
   rpc.API{
     Namespace: "net",
     Version:   "1.0",
-    Service:   NewReplicaNetAPI(),
+    Service:   NewReplicaNetAPI(backend),
     Public:    true,
-  })
+  },
+  rpc.API{
+    Namespace: "eth",
+    Version:   "1.0",
+    Service:   NewPublicEthereumAPI(backend),
+    Public:    true,
+  },
+  )
 }
 func (r *Replica) Start(server *p2p.Server) error {
   fmt.Println("Replica.start()")

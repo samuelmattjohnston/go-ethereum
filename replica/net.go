@@ -1,12 +1,17 @@
 package replica
 
-import "github.com/ethereum/go-ethereum/common/hexutil"
+import (
+	"fmt"
+	"github.com/ethereum/go-ethereum/common/hexutil"
+)
 
-type ReplicaNetAPI struct { }
+type ReplicaNetAPI struct {
+	backend *ReplicaBackend
+}
 
 // NewReplicaNetAPI creates a new net API instance.
-func NewReplicaNetAPI() *ReplicaNetAPI {
-	return &ReplicaNetAPI{}
+func NewReplicaNetAPI(backend *ReplicaBackend) *ReplicaNetAPI {
+	return &ReplicaNetAPI{backend}
 }
 
 // Listening returns an indication if the node is listening for network connections.
@@ -21,5 +26,5 @@ func (s *ReplicaNetAPI) PeerCount() hexutil.Uint {
 
 // Version returns the current ethereum protocol version.
 func (s *ReplicaNetAPI) Version() string {
-	return "63"
+	return fmt.Sprintf("%v", s.backend.ProtocolVersion())
 }
