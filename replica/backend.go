@@ -89,7 +89,7 @@ func (backend *ReplicaBackend) HeaderByHash(ctx context.Context, blockHash commo
 }
 
 func (backend *ReplicaBackend) BlockByNumber(ctx context.Context, blockNr rpc.BlockNumber) (*types.Block, error) {
-  if blockNr == rpc.LatestBlockNumber {
+  if blockNr == rpc.LatestBlockNumber || blockNr == rpc.PendingBlockNumber {
     latestHash := rawdb.ReadHeadBlockHash(backend.db)
 		return backend.bc.GetBlockByHash(latestHash), nil
 	}
