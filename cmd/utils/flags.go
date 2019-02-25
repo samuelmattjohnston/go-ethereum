@@ -602,7 +602,12 @@ var (
 	KafkaTransactionTopicFlag = cli.StringFlag{
 		Name: "kafka.tx.topic",
 		Usage: "Kafka transaction topic name",
-		Value: "",
+		Value: "geth-tx",
+	}
+	KafkaTransactionConsumerGroupFlag = cli.StringFlag{
+		Name: "kafka.tx.consumergroup",
+		Usage: "Kafka transaction consumer group name",
+		Value: "geth-tx",
 	}
 
 

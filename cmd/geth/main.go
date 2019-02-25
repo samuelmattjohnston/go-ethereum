@@ -139,6 +139,7 @@ var (
 		utils.KafkaLogBrokerFlag,
 		utils.KafkaLogTopicFlag,
 		utils.KafkaTransactionTopicFlag,
+		utils.KafkaTransactionConsumerGroupFlag,
 	}
 
 	rpcFlags = []cli.Flag{
@@ -205,6 +206,7 @@ func init() {
 		// See config.go
 		dumpConfigCommand,
 		replicaCommand,
+		txrelayCommand,
 	}
 	sort.Sort(cli.CommandsByName(app.Commands))
 

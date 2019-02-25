@@ -28,6 +28,7 @@ func (batch *BatchWrapper) Put(key, value []byte) (error) {
 }
 
 func (batch *BatchWrapper) Reset() {
+  batch.operations = []BatchOperation{}
   batch.batch.Reset()
 }
 

@@ -3,7 +3,7 @@ package cdc
 import (
   "github.com/ethereum/go-ethereum/rlp"
   "github.com/Shopify/sarama"
-  "log"
+  "github.com/ethereum/go-ethereum/log"
 )
 
 type KafkaLogProducer struct {
@@ -16,12 +16,13 @@ func (producer *KafkaLogProducer) Close() {
 }
 
 func (producer *KafkaLogProducer) Emit(data []byte) error {
+  log.Debug("Emitting data", "topic", producer.topic, "bytes", len(data))
   select {
   case producer.producer.Input() <- &sarama.ProducerMessage{Topic: producer.topic, Value: sarama.ByteEncoder(data)}:
   case err := <-producer.producer.Errors():
     // TODO: If we get an error here, that indicates a problem with an earlier
     // write.
-    log.Printf("Error emitting: %v", err.Error())
+    log.Error("Error emitting: %v", "err", err.Error())
     return err
   }
   return nil
@@ -67,7 +68,7 @@ func (consumer *KafkaLogConsumer) Messages() <-chan *Operation {
         copy(batchValue[:], input.Value[:])
         bop, err := BatchOperationFromBytes(batchValue, input.Topic, input.Offset)
         if err != nil {
-          log.Printf("Message(topic=%v, partition=%v, offset=%v) is not a valid operation: %v\n", input.Topic, input.Partition, input.Offset, err.Error())
+          log.Error("Message(topic=%v, partition=%v, offset=%v) is not a valid operation: %v\n", input.Topic, input.Partition, input.Offset, err.Error())
         }
         batch, ok := batches[string(bop.Batch[:])]
         if !ok {
@@ -80,17 +81,17 @@ func (consumer *KafkaLogConsumer) Messages() <-chan *Operation {
           if batch, ok := batches[string(op.Data)]; ok {
             data, err := rlp.EncodeToBytes(batch)
             if err != nil {
-              log.Printf("Failed to encode batch operation: %v", err)
+              log.Error("Failed to encode batch operation: %v", err)
             }
             delete(batches, string(op.Data))
             op.Data = append(op.Data, data...)
           } else {
-            log.Printf("Could not find matching batch: %#x, (%v known)", op.Data, len(batches))
+            log.Error("Could not find matching batch: %#x, (%v known)", op.Data, len(batches))
             continue
           }
         }
         if err != nil {
-          log.Printf("Message(topic=%v, partition=%v, offset=%v) is not a valid operation: %v\n", input.Topic, input.Partition, input.Offset, err.Error())
+          log.Error("Message(topic=%v, partition=%v, offset=%v) is not a valid operation: %v\n", input.Topic, input.Partition, input.Offset, err.Error())
         }
         consumer.outputChannel <- op
       }
