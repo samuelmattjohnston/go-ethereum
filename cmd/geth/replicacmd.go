@@ -94,7 +94,7 @@ system and acts as an RPC node based on the replicated data.
 		},
 	}
 	nodeConfig = node.Config{
-		Name:             "GethReplica"
+		Name:             "GethReplica",
 		DataDir:          node.DefaultDataDir(),
 		HTTPHost:         "0.0.0.0",
 		HTTPPort:         node.DefaultHTTPPort,
