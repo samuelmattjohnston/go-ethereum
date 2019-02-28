@@ -17,9 +17,9 @@ import (
   "github.com/ethereum/go-ethereum/core/rawdb"
   "github.com/ethereum/go-ethereum/internal/ethapi"
   "github.com/ethereum/go-ethereum/params"
+  "github.com/ethereum/go-ethereum/log"
   "github.com/Shopify/sarama"
   "fmt"
-  "time"
   "strings"
   "strconv"
 )
@@ -77,7 +77,6 @@ func (r *Replica) Stop() error {
   return nil
 }
 
-// TODO ADD THE CONFIGURATION HERE FOR TRIGGERING POSTBACK
 func NewReplica(db ethdb.Database, config *eth.Config, ctx *node.ServiceContext, kafkaSourceBroker []string, kafkaTopic, transactionTopic string) (*Replica, error) {
   topicParts := strings.Split(kafkaTopic, ":")
   kafkaTopic = topicParts[0]
@@ -104,8 +103,7 @@ func NewReplica(db ethdb.Database, config *eth.Config, ctx *node.ServiceContext,
     offset,
   )
   if err != nil { return nil, err }
-  fmt.Printf("Pre: %v\n", time.Now())
-  // TODO : CREATE THE PRODUCER HERE with if conditionals
+  log.Info("Populating replica from topic", "topic", kafkaTopic, "offset", offset)
   transactionProducer, err := NewKafkaTransactionProducerFromURLs(
     kafkaSourceBroker,
     transactionTopic,
@@ -119,7 +117,7 @@ func NewReplica(db ethdb.Database, config *eth.Config, ctx *node.ServiceContext,
     }
   }()
   <-consumer.Ready()
-  fmt.Printf("Post: %v\n", time.Now())
+  log.Info("Replica up to date", "topic", kafkaTopic)
   chainConfig, _, _ := core.SetupGenesisBlock(db, config.Genesis)
   engine := eth.CreateConsensusEngine(ctx, chainConfig, &config.Ethash, []string{}, true, db)
   hc, err := core.NewHeaderChain(db, chainConfig, engine, func() bool { return false })

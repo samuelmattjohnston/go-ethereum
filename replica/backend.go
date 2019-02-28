@@ -7,6 +7,7 @@ import (
   "fmt"
   "math/big"
   "github.com/ethereum/go-ethereum/eth/downloader"
+  "github.com/ethereum/go-ethereum/eth/gasprice"
   "github.com/ethereum/go-ethereum/ethdb"
   "github.com/ethereum/go-ethereum/event"
   "github.com/ethereum/go-ethereum/accounts"
@@ -36,6 +37,7 @@ type ReplicaBackend struct {
   bloomRequests chan chan *bloombits.Retrieval
   shutdownChan chan bool
   accountManager *accounts.Manager
+  gpo *gasprice.Oracle
 }
 
 	// General Ethereum API
@@ -47,19 +49,26 @@ func (backend *ReplicaBackend) Downloader() *downloader.Downloader {								// S
   }
   return backend.dl
 }
-func (backend *ReplicaBackend) ProtocolVersion() int {										// Static? {
+func (backend *ReplicaBackend) ProtocolVersion() int {
   return int(backend.chainConfig.ChainID.Int64())
 }
 func (backend *ReplicaBackend) SuggestPrice(ctx context.Context) (*big.Int, error) {
-  return new(big.Int), nil
-}		// Use gas price oracle
-func (backend *ReplicaBackend) ChainDb() ethdb.Database {									// Just return the database {
+  if backend.gpo == nil {
+    backend.gpo = gasprice.NewOracle(backend, gasprice.Config{
+      Blocks:     20,
+      Percentile: 60,
+      Default: new(big.Int),
+    })
+  }
+  return backend.gpo.SuggestPrice(ctx)
+}
+func (backend *ReplicaBackend) ChainDb() ethdb.Database {
   return backend.db
 }
-func (backend *ReplicaBackend) EventMux() *event.TypeMux {									// Unused, afaict {
+func (backend *ReplicaBackend) EventMux() *event.TypeMux {
   return backend.eventMux
 }
-func (backend *ReplicaBackend) AccountManager() *accounts.Manager {								// We don't want the read replicas to support accounts, so we'll want to minimize this {
+func (backend *ReplicaBackend) AccountManager() *accounts.Manager {
   if backend.accountManager == nil {
     backend.accountManager = accounts.NewManager()
   }
@@ -68,21 +77,17 @@ func (backend *ReplicaBackend) AccountManager() *accounts.Manager {								// We
 
 	// BlockChain API
 
-	// core.blockchain is the basis for most of these, but I think we may want to
-	// reimplement much of that logic to just go straight to ChainDB
-
-	// If we don't offer the private debug APIs, we don't need SetHead
+// If we don't offer the private debug APIs, we don't need SetHead
 func (backend *ReplicaBackend) SetHead(number uint64) {
 
 }
-	// This can probably lean on core.HeaderChain
 func (backend *ReplicaBackend) HeaderByNumber(ctx context.Context, blockNr rpc.BlockNumber) (*types.Header, error) {
   if blockNr == rpc.LatestBlockNumber {
     latestHash := rawdb.ReadHeadHeaderHash(backend.db)
 		return backend.hc.GetHeaderByHash(latestHash), nil
 	}
 	return backend.hc.GetHeaderByNumber(uint64(blockNr)), nil
-} // Get block hash using HeaderByNumber, then get block with GetBlock() {
+}
 
 func (backend *ReplicaBackend) HeaderByHash(ctx context.Context, blockHash common.Hash) (*types.Header, error) {
   return backend.hc.GetHeaderByHash(blockHash), nil
@@ -277,8 +282,15 @@ func (backend *ReplicaBackend) CurrentBlock() *types.Block {
   latestHash := rawdb.ReadHeadBlockHash(backend.db)
   return backend.bc.GetBlockByHash(latestHash)
 }
-
-
-
-
-//
+func NewTestReplicaBackend(db ethdb.Database, hc *core.HeaderChain, bc *core.BlockChain, tp TransactionProducer) (*ReplicaBackend) {
+  return &ReplicaBackend{
+    db: db,
+    indexDb: ethdb.NewTable(db, string(rawdb.BloomBitsIndexPrefix)),
+    hc: hc,
+    chainConfig: params.AllEthashProtocolChanges,
+    bc: bc,
+    transactionProducer: tp,
+    eventMux: new(event.TypeMux),
+    shutdownChan: make(chan bool),
+  }
+}
