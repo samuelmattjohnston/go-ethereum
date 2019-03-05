@@ -4,7 +4,6 @@ import (
   "context"
   "encoding/binary"
   "errors"
-  "fmt"
   "math/big"
   "github.com/ethereum/go-ethereum/eth/downloader"
   "github.com/ethereum/go-ethereum/eth/gasprice"
@@ -182,7 +181,6 @@ func (backend *ReplicaBackend) SendTx(ctx context.Context, signedTx *types.Trans
   if backend.transactionProducer == nil {
     return errors.New("This api is not configured for accepting transactions")
   }
-  fmt.Printf("%v", backend.transactionProducer)
   return backend.transactionProducer.Emit(signedTx)
 }
 
