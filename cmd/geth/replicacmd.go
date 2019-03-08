@@ -153,7 +153,7 @@ func makeReplicaNode(ctx *cli.Context) (*node.Node, gethConfig) {
 		if err != nil {
 			utils.Fatalf("Could not open database: %v", err)
 		}
-	  return replicaModule.NewReplica(
+	  return replicaModule.NewKafkaReplica(
 			chainDb,
 			&cfg.Eth,
 			sctx,

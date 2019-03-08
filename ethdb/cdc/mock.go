@@ -1,66 +1,50 @@
 package cdc
 
 import (
-  "github.com/ethereum/go-ethereum/rlp"
   "log"
 )
 
 type MockLogProducer struct {
-  channel chan *Operation
+  channel chan []byte
 }
 
-var batches map[string][]BatchOperation
-
-
 func (producer *MockLogProducer) Emit(data []byte) error {
-  if batches == nil {
-    batches = make(map[string][]BatchOperation)
-  }
-  var op *Operation
-  var bop BatchOperation
-  var err error
-  if data[0] == 255 {
-    bop, err = BatchOperationFromBytes(data, "", 0)
-    if err != nil { return err }
-    batch, ok := batches[string(bop.Batch[:])]
-    if !ok {
-      batch = []BatchOperation{}
-    }
-    batches[string(bop.Batch[:])] = append(batch, bop)
-  } else {
-    op, err = OperationFromBytes(data, "", 0)
-    if op.Op == OpWrite {
-      data, err := rlp.EncodeToBytes(batches[string(op.Data)])
-      if err != nil {
-        log.Printf("Failed to encode batch operation: %v", err)
-      }
-      delete(batches, string(op.Data))
-      op.Data = append(op.Data, data...)
-    }
-    producer.channel <- op
-  }
+  producer.channel <- data
   return nil
 }
 
 func (producer *MockLogProducer) Close() {}
 
 type MockLogConsumer struct {
-  channel <-chan *Operation
+  channel <-chan []byte
+  handler *BatchHandler
 }
 
 func (consumer *MockLogConsumer) Messages() (<-chan *Operation) {
-  return consumer.channel
+  if consumer.handler == nil {
+    consumer.handler = NewBatchHandler()
+    go func() {
+      counter := int64(0)
+      for value := range consumer.channel {
+        if err := consumer.handler.ProcessInput(value, "mock", counter); err != nil {
+          log.Printf(err.Error())
+        }
+        counter++
+      }
+    }()
+  }
+  return consumer.handler.outputChannel
 }
 
 func (consumer *MockLogConsumer) Ready() (<-chan struct{}) {
   channel := make(chan struct{})
-  channel <- struct{}{}
+  go func () { channel <- struct{}{} }()
   return channel
 }
 
 func (consumer *MockLogConsumer) Close() {}
 
 func MockLogPair() (LogProducer, LogConsumer) {
-  channel := make(chan *Operation, 2)
-  return &MockLogProducer{channel}, &MockLogConsumer{channel}
+  channel := make(chan []byte, 2)
+  return &MockLogProducer{channel}, &MockLogConsumer{channel: channel}
 }

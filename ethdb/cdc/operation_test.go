@@ -1,6 +1,7 @@
 package cdc_test
 
 import (
+  "fmt"
   "github.com/ethereum/go-ethereum/ethdb"
   "github.com/ethereum/go-ethereum/ethdb/cdc"
   "github.com/pborman/uuid"
@@ -39,15 +40,15 @@ func (batch *MockBatch) ValueSize() int {
 
 func (batch *MockBatch) Write() error { return nil }
 
-func (batch *MockBatch) Reset() { return }
+func (batch *MockBatch) Reset() {
+  batch.operations = []cdc.BatchOperation{}
+}
 
 func (batch *MockBatch) Delete(key []byte) error {
   op := cdc.BatchOperation{cdc.OpDelete, batch.batchid, key}
   batch.operations = append(batch.operations, op)
   return nil
 }
-
-func (batch *MockBatch) GetOperations() []cdc.BatchOperation { return batch.operations }
 
 func opsEqual(op1, op2 *cdc.Operation) (bool) {
   if op1.Op != op2.Op {
@@ -67,11 +68,14 @@ func checkOperations(op *cdc.Operation, t *testing.T) {
 }
 
 func TestEncodePutOperation(t *testing.T) {
-  for _, v := range test_values {
+  for i, v := range test_values {
     op, err := cdc.PutOperation([]byte(v), []byte(v))
+    op.Offset = int64(i)
+    op.Topic = "test"
     if err != nil {
       t.Fatalf("put failed: %v", err)
     }
+    fmt.Sprintf("%s\n", op)
     checkOperations(op, t)
     db := ethdb.NewMemDatabase()
     err = op.Apply(db)
@@ -93,6 +97,7 @@ func TestEncodeDeleteOperation(t *testing.T) {
     if err != nil {
       t.Fatalf("delete failed: %v", err)
     }
+    fmt.Sprintf("%s\n", op)
     checkOperations(op, t)
     db := ethdb.NewMemDatabase()
     db.Put([]byte(v), []byte(v))
@@ -111,6 +116,7 @@ func TestEncodeWriteOperation(t *testing.T) {
   for _, v := range test_values {
     batch.Put([]byte(v), []byte(v))
   }
+  batch.Delete([]byte("gone"))
   op, err := cdc.WriteOperation(batch)
   if err != nil {
     t.Fatalf("batch write failed: %v", err)
@@ -120,8 +126,10 @@ func TestEncodeWriteOperation(t *testing.T) {
     t.Fatalf(err.Error())
   }
   op.Data = append(op.Data, data...)
+  fmt.Sprintf("%s\n", op)
   checkOperations(op, t)
   db := ethdb.NewMemDatabase()
+  db.Put([]byte("gone"), []byte("deleted"))
   err = op.Apply(db)
   if err != nil {
     t.Fatalf("operation.Apply failed: %v", err)
@@ -134,6 +142,9 @@ func TestEncodeWriteOperation(t *testing.T) {
     if bytes.Compare(value, []byte(v)) != 0 {
       t.Errorf("Got unexpected value '%v' != '%v'", value, v)
     }
+  }
+  if _, err := db.Get([]byte("gone")); err == nil {
+    t.Errorf("Key should have been deleted")
   }
 }
 

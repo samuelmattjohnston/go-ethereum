@@ -8,13 +8,27 @@ import (
   "bytes"
   // "log"
   "time"
+  "errors"
 )
 
 func getTestWrapper() (ethdb.Database, cdc.LogConsumer, cdc.LogConsumer) {
   writeProducer, writeConsumer := cdc.MockLogPair()
   readProducer, readConsumer := cdc.MockLogPair()
+  <-writeConsumer.Ready()
   db := ethdb.NewMemDatabase()
   return cdc.NewDBWrapper(db, writeProducer, readProducer), writeConsumer, readConsumer
+}
+
+func getOpWithTimeout(ch <-chan *cdc.Operation) (*cdc.Operation, error) {
+  for i := 0; i < 5; i++ {
+    select {
+    case op := <-ch:
+      return op, nil
+    default:
+      time.Sleep(100 * time.Millisecond)
+    }
+  }
+  return nil, errors.New("Timeout")
 }
 
 func TestPut(t *testing.T) {
@@ -24,18 +38,17 @@ func TestPut(t *testing.T) {
   if err != nil {
     t.Fatalf(err.Error())
   }
-  select {
-  case op := <-writeStream.Messages():
-    if op.Op != cdc.OpPut {
-      t.Errorf("Got unexpected operation type: %v", op.Op)
-    }
-    kv := &cdc.KeyValue{}
-    rlp.DecodeBytes(op.Data, kv)
-    if bytes.Compare(kv.Key, []byte("hello")) != 0 || bytes.Compare(kv.Value, []byte("world")) != 0 {
-      t.Errorf("Unexpected Key Pair: %v: %v", kv.Key, kv.Value)
-    }
-  default:
-    t.Fatalf("No message available on stream")
+  op, err := getOpWithTimeout(writeStream.Messages())
+  if err != nil {
+    t.Fatalf(err.Error())
+  }
+  if op.Op != cdc.OpPut {
+    t.Errorf("Got unexpected operation type: %v", op.Op)
+  }
+  kv := &cdc.KeyValue{}
+  rlp.DecodeBytes(op.Data, kv)
+  if bytes.Compare(kv.Key, []byte("hello")) != 0 || bytes.Compare(kv.Value, []byte("world")) != 0 {
+    t.Errorf("Unexpected Key Pair: %v: %v", kv.Key, kv.Value)
   }
 }
 
@@ -53,16 +66,15 @@ func TestGet(t *testing.T) {
   if bytes.Compare(val, []byte("world")) != 0 {
     t.Errorf("Unexpected value from db get: %v", val)
   }
-  select {
-  case op := <-readStream.Messages():
-    if op.Op != cdc.OpGet {
-      t.Errorf("Got unexpected operation type: %v", op.Op)
-    }
-    if bytes.Compare(op.Data, []byte("hello")) != 0 {
-      t.Errorf("Unexpected Key: %v", op.Data)
-    }
-  default:
-    t.Fatalf("No message available on stream")
+  op, err := getOpWithTimeout(readStream.Messages())
+  if err != nil {
+    t.Fatalf(err.Error())
+  }
+  if op.Op != cdc.OpGet {
+    t.Errorf("Got unexpected operation type: %v", op.Op)
+  }
+  if bytes.Compare(op.Data, []byte("hello")) != 0 {
+    t.Errorf("Unexpected Key: %v", op.Data)
   }
 }
 
@@ -87,27 +99,25 @@ func TestHas(t *testing.T) {
   if val {
     t.Errorf("Unexpected value from db get: %v", val)
   }
-  select {
-  case op := <-readStream.Messages():
-    if op.Op != cdc.OpHas {
-      t.Errorf("Got unexpected operation type: %v", op.Op)
-    }
-    if bytes.Compare(op.Data, []byte("hello")) != 0 {
-      t.Errorf("Unexpected Key: %v", op.Data)
-    }
-  default:
-    t.Fatalf("No message available on stream")
+  op, err := getOpWithTimeout(readStream.Messages())
+  if err != nil {
+    t.Fatalf(err.Error())
   }
-  select {
-  case op := <-readStream.Messages():
-    if op.Op != cdc.OpHas {
-      t.Errorf("Got unexpected operation type: %v", op.Op)
-    }
-    if bytes.Compare(op.Data, []byte("world")) != 0 {
-      t.Errorf("Unexpected Key: %v", op.Data)
-    }
-  default:
-    t.Fatalf("No message available on stream")
+  if op.Op != cdc.OpHas {
+    t.Errorf("Got unexpected operation type: %v", op.Op)
+  }
+  if bytes.Compare(op.Data, []byte("hello")) != 0 {
+    t.Errorf("Unexpected Key: %v", op.Data)
+  }
+  op, err = getOpWithTimeout(readStream.Messages())
+  if err != nil {
+    t.Fatalf(err.Error())
+  }
+  if op.Op != cdc.OpHas {
+    t.Errorf("Got unexpected operation type: %v", op.Op)
+  }
+  if bytes.Compare(op.Data, []byte("world")) != 0 {
+    t.Errorf("Unexpected Key: %v", op.Data)
   }
 }
 
@@ -118,25 +128,23 @@ func TestDelete(t *testing.T) {
   if err != nil {
     t.Fatalf(err.Error())
   }
-  select {
-  case _ = <-writeStream.Messages():
-  default:
-    t.Errorf("Expected put messsage on stream")
+  _, err = getOpWithTimeout(writeStream.Messages())
+  if err != nil {
+    t.Fatalf(err.Error())
   }
   err = db.Delete([]byte("hello"))
   if err != nil {
     t.Fatalf(err.Error())
   }
-  select {
-  case op := <-writeStream.Messages():
-    if op.Op != cdc.OpDelete {
-      t.Errorf("Got unexpected operation type: %v", op.Op)
-    }
-    if bytes.Compare(op.Data, []byte("hello")) != 0 {
-      t.Errorf("Unexpected Key: %v", op.Data)
-    }
-  default:
-    t.Fatalf("No message available on stream")
+  op, err := getOpWithTimeout(writeStream.Messages())
+  if err != nil {
+    t.Fatalf(err.Error())
+  }
+  if op.Op != cdc.OpDelete {
+    t.Errorf("Got unexpected operation type: %v", op.Op)
+  }
+  if bytes.Compare(op.Data, []byte("hello")) != 0 {
+    t.Errorf("Unexpected Key: %v", op.Data)
   }
   if val, _ := db.Has([]byte("hello")); val {
     t.Errorf("Key unexpectedly found in %s database")
@@ -146,6 +154,8 @@ func TestDelete(t *testing.T) {
 func TestBatchWrapper(t *testing.T) {
   db, writeStream, _ := getTestWrapper()
   defer db.Close()
+  db.Put([]byte("gone"), []byte("nothere"))
+  <-writeStream.Messages() // Throw away the initial
   batch := db.NewBatch()
   batch.Put([]byte("hello"), []byte("world"))
   select {
@@ -162,13 +172,19 @@ func TestBatchWrapper(t *testing.T) {
     t.Errorf("No messages expected yet")
   default:
   }
-  if size := batch.ValueSize(); size != 10 {
+  batch.Delete([]byte("gone"))
+  select {
+  case _ = <-writeStream.Messages():
+    t.Errorf("No messages expected yet")
+  default:
+  }
+  if size := batch.ValueSize(); size != 11 {
     t.Errorf("Unexpected value size %v", size)
   }
   go batch.Write()
   success := false
   Loop:
-    for i := 0; i < 10; i++ {
+    for i := 0; i < 11; i++ {
       select {
       case op := <-writeStream.Messages():
         if op.Op != cdc.OpWrite {
@@ -180,12 +196,18 @@ func TestBatchWrapper(t *testing.T) {
         }
         kvs := []cdc.KeyValue{}
         for _, bop := range operations {
-          if bop.Op != cdc.OpPut {
+          switch bop.Op {
+          case cdc.OpPut:
+            kv := &cdc.KeyValue{}
+            if err := rlp.DecodeBytes(bop.Data, kv); err != nil { t.Errorf(err.Error()) }
+            kvs = append(kvs, *kv)
+          case cdc.OpDelete:
+            if string(bop.Data) != "gone" {
+              t.Errorf("Unexpected delete operation")
+            }
+          default:
             t.Errorf("Expected put operation")
           }
-          kv := &cdc.KeyValue{}
-          if err := rlp.DecodeBytes(bop.Data, kv); err != nil { t.Errorf(err.Error()) }
-          kvs = append(kvs, *kv)
         }
         if bytes.Compare(kvs[0].Key, []byte("hello")) != 0 || bytes.Compare(kvs[0].Value, []byte("world")) != 0 {
           t.Errorf("Unexpected Key Value Pair: %v, %v", kvs[0].Key, kvs[0].Value)
@@ -202,6 +224,15 @@ func TestBatchWrapper(t *testing.T) {
     if !success {
       t.Errorf("Expected batch write")
     }
+}
 
-
+func TestBatchWrapperReset(t *testing.T) {
+  db, _, _ := getTestWrapper()
+  defer db.Close()
+  batch := db.NewBatch()
+  batch.Put([]byte("hello"), []byte("world"))
+  batch.Reset()
+  if size := batch.ValueSize(); size != 0 {
+    t.Errorf("Unexpected value size %v", size)
+  }
 }

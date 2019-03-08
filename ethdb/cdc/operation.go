@@ -15,8 +15,6 @@ const (
   OpWrite byte = 2
   OpGet byte = 3
   OpHas byte = 4
-  OpBlockStart byte = 5
-  OpBlockEnd byte = 6
 )
 
 
@@ -72,15 +70,16 @@ type Operation struct {
   Topic string
 }
 
-func updateOffset(putter ethdb.Putter, op *Operation) {
+func updateOffset(putter ethdb.Putter, op *Operation) error {
   if op.Offset != 0 {
     buf := make([]byte, binary.MaxVarintLen64)
     binary.PutVarint(buf, op.Offset)
-    putter.Put(
+    return putter.Put(
       []byte(fmt.Sprintf("cdc-log-%v-offset", op.Topic)),
       buf,
     )
   }
+  return nil
 }
 func (op *Operation) Apply(db ethdb.Database) error {
   switch op.Op {
@@ -89,12 +88,12 @@ func (op *Operation) Apply(db ethdb.Database) error {
     kv := &KeyValue{}
     if err := rlp.DecodeBytes(op.Data, kv); err != nil { return err }
     if err := batch.Put(kv.Key, kv.Value); err != nil { return err }
-    updateOffset(batch, op)
+    if err := updateOffset(batch, op); err != nil { return err }
     if err := batch.Write(); err != nil { return err }
   case OpDelete:
     // For OpDelete, op.Data is the key to be deleted
     db.Delete(op.Data)
-    updateOffset(db, op)
+    if err := updateOffset(db, op); err != nil { return err }
   case OpWrite:
     batch := db.NewBatch()
     var operations []BatchOperation
@@ -111,7 +110,7 @@ func (op *Operation) Apply(db ethdb.Database) error {
         fmt.Printf("Unsupported operation: %#x", bop.Op)
       }
     }
-    updateOffset(batch, op)
+    if err := updateOffset(batch, op); err != nil { return err }
     if err := batch.Write(); err != nil { return err }
   default:
     fmt.Printf("Unknown operation: %v \n", op)
@@ -136,14 +135,6 @@ func (op *Operation) String() (string) {
     var puts []KeyValue
     rlp.DecodeBytes(op.Data, &puts)
     return fmt.Sprintf("WRITE: %v", KVs(puts))
-  case OpBlockStart:
-    var blocknum uint64
-    rlp.DecodeBytes(op.Data, &blocknum)
-    return fmt.Sprintf("BLOCKSTART: %v", blocknum)
-  case OpBlockEnd:
-    var blocknum uint64
-    rlp.DecodeBytes(op.Data, &blocknum)
-    return fmt.Sprintf("BLOCKEND: %v", blocknum)
   }
   return "UNKNOWN"
 }
@@ -188,16 +179,4 @@ func GetOperation(key []byte) (*Operation, error) {
 
 func HasOperation(key []byte) (*Operation, error) {
   return &Operation{OpHas, key, 0, ""}, nil
-}
-
-func BlockStartOperation(blockNum uint64) (*Operation, error) {
-  data, err := rlp.EncodeToBytes(blockNum)
-  if err != nil { return nil, err }
-  return &Operation{OpBlockStart, data, 0, ""}, nil
-}
-
-func BlockEndOperation(blockNum uint64) (*Operation, error) {
-  data, err := rlp.EncodeToBytes(blockNum)
-  if err != nil { return nil, err }
-  return &Operation{OpBlockEnd, data, 0, ""}, nil
 }

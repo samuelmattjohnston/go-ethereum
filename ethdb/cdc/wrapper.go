@@ -62,10 +62,6 @@ func (batch *BatchWrapper) Write() error {
   return batch.batch.Write()
 }
 
-func (batch *BatchWrapper) GetOperations() []BatchOperation {
-  return batch.operations
-}
-
 type DBWrapper struct {
   db ethdb.Database
   writeStream LogProducer

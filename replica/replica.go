@@ -77,7 +77,28 @@ func (r *Replica) Stop() error {
   return nil
 }
 
-func NewReplica(db ethdb.Database, config *eth.Config, ctx *node.ServiceContext, kafkaSourceBroker []string, kafkaTopic, transactionTopic string) (*Replica, error) {
+func NewReplica(db ethdb.Database, config *eth.Config, ctx *node.ServiceContext, transactionProducer TransactionProducer, consumer cdc.LogConsumer) (*Replica, error) {
+  go func() {
+    for operation := range consumer.Messages() {
+      operation.Apply(db)
+    }
+  }()
+  <-consumer.Ready()
+  log.Info("Replica up to date")
+  chainConfig, _, _ := core.SetupGenesisBlock(db, config.Genesis)
+  engine := eth.CreateConsensusEngine(ctx, chainConfig, &config.Ethash, []string{}, true, db)
+  hc, err := core.NewHeaderChain(db, chainConfig, engine, func() bool { return false })
+  if err != nil {
+    return nil, err
+  }
+  bc, err := core.NewBlockChain(db, &core.CacheConfig{Disabled: true}, chainConfig, engine, vm.Config{}, nil)
+  if err != nil {
+    return nil, err
+  }
+  return &Replica{db, hc, chainConfig, bc, transactionProducer, make(chan bool)}, nil
+}
+
+func NewKafkaReplica(db ethdb.Database, config *eth.Config, ctx *node.ServiceContext, kafkaSourceBroker []string, kafkaTopic, transactionTopic string) (*Replica, error) {
   topicParts := strings.Split(kafkaTopic, ":")
   kafkaTopic = topicParts[0]
   var offset int64
@@ -111,22 +132,5 @@ func NewReplica(db ethdb.Database, config *eth.Config, ctx *node.ServiceContext,
   if err != nil {
     return nil, err
   }
-  go func() {
-    for operation := range consumer.Messages() {
-      operation.Apply(db)
-    }
-  }()
-  <-consumer.Ready()
-  log.Info("Replica up to date", "topic", kafkaTopic)
-  chainConfig, _, _ := core.SetupGenesisBlock(db, config.Genesis)
-  engine := eth.CreateConsensusEngine(ctx, chainConfig, &config.Ethash, []string{}, true, db)
-  hc, err := core.NewHeaderChain(db, chainConfig, engine, func() bool { return false })
-  if err != nil {
-    return nil, err
-  }
-  bc, err := core.NewBlockChain(db, &core.CacheConfig{Disabled: true}, chainConfig, engine, vm.Config{}, nil)
-  if err != nil {
-    return nil, err
-  }
-  return &Replica{db, hc, chainConfig, bc, transactionProducer, make(chan bool)}, nil
+  return NewReplica(db, config, ctx, transactionProducer, consumer)
 }
