@@ -7,8 +7,10 @@ import (
   "github.com/ethereum/go-ethereum/rlp"
   "github.com/pborman/uuid"
   "errors"
+  "time"
 )
 
+// TODO: Add OpHearbeat + Hearbeat loop
 const (
   OpPut byte = 0
   OpDelete byte = 1
@@ -72,8 +74,9 @@ type Operation struct {
 
 func updateOffset(putter ethdb.Putter, op *Operation) error {
   if op.Offset != 0 {
-    buf := make([]byte, binary.MaxVarintLen64)
-    binary.PutVarint(buf, op.Offset)
+    buf := make([]byte, binary.MaxVarintLen64*2)
+    binary.PutVarint(buf[0:binary.MaxVarintLen64], op.Offset)
+    binary.PutVarint(buf[binary.MaxVarintLen64:], time.Now().Unix())
     return putter.Put(
       []byte(fmt.Sprintf("cdc-log-%v-offset", op.Topic)),
       buf,

@@ -77,6 +77,10 @@ func (consumer *KafkaLogConsumer) Close() {
   consumer.consumer.Close()
 }
 
+func (consumer *KafkaLogConsumer) TopicName() string {
+  return consumer.topic
+}
+
 func NewKafkaLogConsumer(consumer sarama.Consumer, topic string, offset int64) (LogConsumer, error) {
   partitionConsumer, err := consumer.ConsumePartition(topic, 0, offset)
   if err != nil {

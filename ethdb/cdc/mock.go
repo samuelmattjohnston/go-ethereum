@@ -44,6 +44,10 @@ func (consumer *MockLogConsumer) Ready() (<-chan struct{}) {
 
 func (consumer *MockLogConsumer) Close() {}
 
+func (consumer *MockLogConsumer) TopicName() string {
+  return "mock"
+}
+
 func MockLogPair() (LogProducer, LogConsumer) {
   channel := make(chan []byte, 2)
   return &MockLogProducer{channel}, &MockLogConsumer{channel: channel}

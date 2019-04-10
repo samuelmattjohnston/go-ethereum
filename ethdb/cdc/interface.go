@@ -18,4 +18,5 @@ type LogConsumer interface {
   Messages() <-chan *Operation
   Ready() <-chan struct{}
   Close()
+  TopicName() string
 }
