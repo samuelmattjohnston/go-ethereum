@@ -140,6 +140,7 @@ var (
 		utils.KafkaLogTopicFlag,
 		utils.KafkaTransactionTopicFlag,
 		utils.KafkaTransactionConsumerGroupFlag,
+		utils.ReplicaSyncShutdownFlag,
 	}
 
 	rpcFlags = []cli.Flag{

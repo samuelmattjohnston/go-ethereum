@@ -55,6 +55,7 @@ system and acts as an RPC node based on the replicated data.
 			utils.KafkaLogTopicFlag,
 			utils.KafkaTransactionTopicFlag,
 			utils.DataDirFlag,
+			utils.ReplicaSyncShutdownFlag,
 		},
 	}
 	replicaTxPoolConfig = core.TxPoolConfig{
@@ -160,6 +161,7 @@ func makeReplicaNode(ctx *cli.Context) (*node.Node, gethConfig) {
 			[]string{ctx.GlobalString(utils.KafkaLogBrokerFlag.Name)},
 			ctx.GlobalString(utils.KafkaLogTopicFlag.Name),
 			ctx.GlobalString(utils.KafkaTransactionTopicFlag.Name),
+			ctx.GlobalBool(utils.ReplicaSyncShutdownFlag.Name),
 		)
 	})
 	return stack, cfg

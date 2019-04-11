@@ -609,7 +609,10 @@ var (
 		Usage: "Kafka transaction consumer group name",
 		Value: "geth-tx",
 	}
-
+	ReplicaSyncShutdownFlag = cli.BoolFlag{
+		Name: "replica.syncshutdown",
+		Usage: "Shutdown replica when it has finished syncing from kafka",
+	}
 
 	// Metrics flags
 	MetricsEnabledFlag = cli.BoolFlag{
@@ -1017,6 +1020,7 @@ func SetNodeConfig(ctx *cli.Context, cfg *node.Config) {
 	cfg.KafkaLogBroker = ctx.GlobalString(KafkaLogBrokerFlag.Name)
 	cfg.KafkaLogTopic = ctx.GlobalString(KafkaLogTopicFlag.Name)
 	cfg.KafkaTransactionTopic = ctx.GlobalString(KafkaTransactionTopicFlag.Name)
+	cfg.ReplicaSyncShutdown = ctx.GlobalBool(ReplicaSyncShutdownFlag.Name)
 
 	setDataDir(ctx, cfg)
 
