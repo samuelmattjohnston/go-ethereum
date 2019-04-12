@@ -29,6 +29,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/console"
 	"github.com/ethereum/go-ethereum/core"
+	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/eth/downloader"
@@ -170,6 +171,23 @@ Remove blockchain and state databases`,
 		Description: `
 The arguments are interpreted as block numbers or hashes.
 Use "ethereum dump 0" to dump the genesis block.`,
+	}
+	setHeadCommand = cli.Command{
+		Action:    utils.MigrateFlags(setHead),
+		Name:      "sethead",
+		Usage:     "Sets the head block to a specific block",
+		ArgsUsage: "[<blockHash> | <blockNum> | <-blockCount>]...",
+		Flags: []cli.Flag{
+			utils.DataDirFlag,
+			utils.CacheFlag,
+			utils.SyncModeFlag,
+			utils.KafkaLogBrokerFlag,
+			utils.KafkaLogTopicFlag,
+		},
+		Category: "BLOCKCHAIN COMMANDS",
+		Description: `
+The arguments are interpreted as block numbers, hashes, or a number of blocks to be rolled back.
+Use "ethereum sethead -2" to drop the two most recent blocks`,
 	}
 )
 
@@ -465,6 +483,32 @@ func dump(ctx *cli.Context) error {
 		}
 	}
 	chainDb.Close()
+	return nil
+}
+
+func setHead(ctx *cli.Context) error {
+	if len(ctx.Args()) < 1 {
+		utils.Fatalf("This command requires an argument.")
+	}
+	stack := makeFullNode(ctx)
+	chain, db := utils.MakeChain(ctx, stack)
+	arg := ctx.Args()[0]
+	blockNumber, err := strconv.Atoi(arg)
+	if err != nil {
+		block := chain.GetBlockByHash(common.HexToHash(arg))
+		blockNumber = int(block.Number().Int64())
+	} else if blockNumber < 0 {
+		latestHash := rawdb.ReadHeadBlockHash(db)
+		block := chain.GetBlockByHash(latestHash)
+		blockNumber = int(block.Number().Int64()) + blockNumber
+	}
+	if err := chain.SetHead(uint64(blockNumber)); err != nil {
+		fmt.Printf("Failed to set head to %v", blockNumber)
+		return err
+	}
+	chain.Stop()
+	db.Close()
+	fmt.Printf("Rolled back chain to block %v\n", blockNumber)
 	return nil
 }
 
