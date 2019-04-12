@@ -24,6 +24,7 @@ import (
   "fmt"
   "strings"
   "strconv"
+  "os"
 )
 
 type Replica struct {
@@ -104,7 +105,7 @@ func (r *Replica) Stop() error {
   return nil
 }
 
-func NewReplica(db ethdb.Database, config *eth.Config, ctx *node.ServiceContext, transactionProducer TransactionProducer, consumer cdc.LogConsumer) (*Replica, error) {
+func NewReplica(db ethdb.Database, config *eth.Config, ctx *node.ServiceContext, transactionProducer TransactionProducer, consumer cdc.LogConsumer, syncShutdown bool) (*Replica, error) {
   go func() {
     for operation := range consumer.Messages() {
       operation.Apply(db)
@@ -112,6 +113,10 @@ func NewReplica(db ethdb.Database, config *eth.Config, ctx *node.ServiceContext,
   }()
   <-consumer.Ready()
   log.Info("Replica up to date")
+  if syncShutdown {
+    log.Info("Replica shutdown after sync flag was set, shutting down")
+    os.Exit(0)
+  }
   chainConfig, _, _ := core.SetupGenesisBlock(db, config.Genesis)
   engine := eth.CreateConsensusEngine(ctx, chainConfig, &config.Ethash, []string{}, true, db)
   hc, err := core.NewHeaderChain(db, chainConfig, engine, func() bool { return false })
@@ -125,7 +130,7 @@ func NewReplica(db ethdb.Database, config *eth.Config, ctx *node.ServiceContext,
   return &Replica{db, hc, chainConfig, bc, transactionProducer, make(chan bool), consumer.TopicName()}, nil
 }
 
-func NewKafkaReplica(db ethdb.Database, config *eth.Config, ctx *node.ServiceContext, kafkaSourceBroker []string, kafkaTopic, transactionTopic string) (*Replica, error) {
+func NewKafkaReplica(db ethdb.Database, config *eth.Config, ctx *node.ServiceContext, kafkaSourceBroker []string, kafkaTopic, transactionTopic string, syncShutdown bool) (*Replica, error) {
   topicParts := strings.Split(kafkaTopic, ":")
   kafkaTopic = topicParts[0]
   var offset int64
@@ -163,5 +168,5 @@ func NewKafkaReplica(db ethdb.Database, config *eth.Config, ctx *node.ServiceCon
   if err != nil {
     return nil, err
   }
-  return NewReplica(db, config, ctx, transactionProducer, consumer)
+  return NewReplica(db, config, ctx, transactionProducer, consumer, syncShutdown)
 }
