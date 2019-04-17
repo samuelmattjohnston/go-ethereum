@@ -613,6 +613,11 @@ var (
 		Name: "replica.syncshutdown",
 		Usage: "Shutdown replica when it has finished syncing from kafka",
 	}
+	ReplicaStartupMaxAgeFlag = cli.Int64Flag{
+		Name: "replica.startup.age",
+		Usage: "Do not start serving RPC while the latest block exceeds this age in seconds",
+		Value: 0,
+	}
 
 	// Metrics flags
 	MetricsEnabledFlag = cli.BoolFlag{

@@ -20,6 +20,7 @@ import (
   "github.com/ethereum/go-ethereum/params"
   "github.com/ethereum/go-ethereum/log"
   "github.com/Shopify/sarama"
+  "math/big"
   "time"
   "fmt"
   "strings"
@@ -105,14 +106,16 @@ func (r *Replica) Stop() error {
   return nil
 }
 
-func NewReplica(db ethdb.Database, config *eth.Config, ctx *node.ServiceContext, transactionProducer TransactionProducer, consumer cdc.LogConsumer, syncShutdown bool) (*Replica, error) {
+func NewReplica(db ethdb.Database, config *eth.Config, ctx *node.ServiceContext, transactionProducer TransactionProducer, consumer cdc.LogConsumer, syncShutdown bool, startupAge int64) (*Replica, error) {
   go func() {
     for operation := range consumer.Messages() {
       operation.Apply(db)
     }
   }()
-  <-consumer.Ready()
-  log.Info("Replica up to date")
+  if ready := consumer.Ready(); ready != nil {
+    <-ready
+  }
+  log.Info("Replica up to date with master")
   if syncShutdown {
     log.Info("Replica shutdown after sync flag was set, shutting down")
     os.Exit(0)
@@ -127,10 +130,17 @@ func NewReplica(db ethdb.Database, config *eth.Config, ctx *node.ServiceContext,
   if err != nil {
     return nil, err
   }
+  if startupAge > 0 {
+    log.Info("Waiting for current block time")
+    for big.NewInt(time.Now().Unix() - startupAge).Cmp(bc.GetBlockByHash(rawdb.ReadHeadBlockHash(db)).Time()) > 0 {
+      time.Sleep(100 * time.Millisecond)
+    }
+    log.Info("Block time is current. Starting replica.")
+  }
   return &Replica{db, hc, chainConfig, bc, transactionProducer, make(chan bool), consumer.TopicName()}, nil
 }
 
-func NewKafkaReplica(db ethdb.Database, config *eth.Config, ctx *node.ServiceContext, kafkaSourceBroker []string, kafkaTopic, transactionTopic string, syncShutdown bool) (*Replica, error) {
+func NewKafkaReplica(db ethdb.Database, config *eth.Config, ctx *node.ServiceContext, kafkaSourceBroker []string, kafkaTopic, transactionTopic string, syncShutdown bool, startupAge int64) (*Replica, error) {
   topicParts := strings.Split(kafkaTopic, ":")
   kafkaTopic = topicParts[0]
   var offset int64
@@ -168,5 +178,5 @@ func NewKafkaReplica(db ethdb.Database, config *eth.Config, ctx *node.ServiceCon
   if err != nil {
     return nil, err
   }
-  return NewReplica(db, config, ctx, transactionProducer, consumer, syncShutdown)
+  return NewReplica(db, config, ctx, transactionProducer, consumer, syncShutdown, startupAge)
 }

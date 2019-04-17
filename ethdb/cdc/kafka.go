@@ -3,15 +3,30 @@ package cdc
 import (
   "github.com/Shopify/sarama"
   "github.com/ethereum/go-ethereum/log"
+  "time"
 )
 
 type KafkaLogProducer struct {
   producer sarama.AsyncProducer
   topic string
+  closed bool
 }
 
 func (producer *KafkaLogProducer) Close() {
+  producer.closed = true
   producer.producer.Close()
+}
+func (producer *KafkaLogProducer) Start(duration time.Duration) {
+  go func() {
+    futureTimer := time.NewTicker(duration)
+    heartbeatBytes := HeartbeatOperation().Bytes()
+    for range futureTimer.C {
+      if producer.closed {
+        break
+      }
+      producer.Emit(heartbeatBytes)
+    }
+  }()
 }
 
 func (producer *KafkaLogProducer) Emit(data []byte) error {
@@ -37,7 +52,10 @@ func NewKafkaLogProducerFromURLs(brokers []string, topic string) (LogProducer, e
 }
 
 func NewKafkaLogProducer(producer sarama.AsyncProducer, topic string) (LogProducer) {
-  return &KafkaLogProducer{producer, topic}
+  logProducer := &KafkaLogProducer{producer, topic, false}
+  // TODO: Make duration configurable?
+  logProducer.Start(30 * time.Second)
+  return logProducer
 }
 
 type KafkaLogConsumer struct {
@@ -53,6 +71,10 @@ func (consumer *KafkaLogConsumer) Messages() <-chan *Operation {
   }
   inputChannel := consumer.consumer.Messages()
   consumer.batchHandler = NewBatchHandler()
+  if consumer.consumer.HighWaterMarkOffset() == 0 {
+    consumer.ready <- struct{}{}
+    consumer.ready = nil
+  }
   go func() {
     for input := range inputChannel {
       if consumer.ready != nil {

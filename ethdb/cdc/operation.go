@@ -10,13 +10,14 @@ import (
   "time"
 )
 
-// TODO: Add OpHearbeat + Hearbeat loop
+// TODO: Add OpHeartbeat + Hearbeat loop
 const (
   OpPut byte = 0
   OpDelete byte = 1
   OpWrite byte = 2
-  OpGet byte = 3
-  OpHas byte = 4
+  OpHeartbeat byte = 3
+  OpGet byte = 4
+  OpHas byte = 5
 )
 
 
@@ -112,9 +113,12 @@ func (op *Operation) Apply(db ethdb.Database) error {
       default:
         fmt.Printf("Unsupported operation: %#x", bop.Op)
       }
+
     }
     if err := updateOffset(batch, op); err != nil { return err }
     if err := batch.Write(); err != nil { return err }
+  case OpHeartbeat:
+    return updateOffset(db, op)
   default:
     fmt.Printf("Unknown operation: %v \n", op)
   }
@@ -138,6 +142,8 @@ func (op *Operation) String() (string) {
     var puts []KeyValue
     rlp.DecodeBytes(op.Data, &puts)
     return fmt.Sprintf("WRITE: %v", KVs(puts))
+  case OpHeartbeat:
+    return "HEARTBEAT"
   }
   return "UNKNOWN"
 }
@@ -167,6 +173,10 @@ func PutOperation(key, value []byte) (*Operation, error) {
 
 func DeleteOperation(key []byte) (*Operation, error) {
   return &Operation{OpDelete, key, 0, ""}, nil
+}
+
+func HeartbeatOperation() (*Operation) {
+  return &Operation{OpHeartbeat, []byte{}, 0, ""}
 }
 
 func WriteOperation(batch Batch) (*Operation, error) {
