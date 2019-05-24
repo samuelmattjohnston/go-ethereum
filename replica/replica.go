@@ -36,6 +36,8 @@ type Replica struct {
   transactionProducer TransactionProducer
   shutdownChan chan bool
   topic string
+  maxOffsetAge int64
+  maxBlockAge  int64
 }
 
 func (r *Replica) Protocols() []p2p.Protocol {
@@ -97,6 +99,15 @@ func (r *Replica) Start(server *p2p.Server) error {
           log.Error("Offset buffer too small")
         }
       }
+      now := time.Now().Unix()
+      if r.maxBlockAge > 0 && now - currentBlock.Time().Int64() > r.maxBlockAge {
+        log.Error("Max block age exceeded.", "maxAgeSec", r.maxBlockAge, "realAge", common.PrettyAge(time.Unix(currentBlock.Time().Int64(), 0)))
+        os.Exit(1)
+      }
+      if r.maxOffsetAge > 0 && now - offsetTimestamp > r.maxOffsetAge {
+        log.Error("Max offset age exceeded.", "maxAgeSec", r.maxBlockAge, "realAge", common.PrettyAge(time.Unix(offsetTimestamp, 0)))
+        os.Exit(1)
+      }
       log.Info("Replica Sync", "num", currentBlock.Number(), "hash", currentBlock.Hash(), "blockAge", common.PrettyAge(time.Unix(currentBlock.Time().Int64(), 0)), "offset", offset, "offsetAge", common.PrettyAge(time.Unix(offsetTimestamp, 0)))
     }
   }()
@@ -106,7 +117,7 @@ func (r *Replica) Stop() error {
   return nil
 }
 
-func NewReplica(db ethdb.Database, config *eth.Config, ctx *node.ServiceContext, transactionProducer TransactionProducer, consumer cdc.LogConsumer, syncShutdown bool, startupAge int64) (*Replica, error) {
+func NewReplica(db ethdb.Database, config *eth.Config, ctx *node.ServiceContext, transactionProducer TransactionProducer, consumer cdc.LogConsumer, syncShutdown bool, startupAge, maxOffsetAge, maxBlockAge int64) (*Replica, error) {
   go func() {
     for operation := range consumer.Messages() {
       operation.Apply(db)
@@ -137,10 +148,10 @@ func NewReplica(db ethdb.Database, config *eth.Config, ctx *node.ServiceContext,
     }
     log.Info("Block time is current. Starting replica.")
   }
-  return &Replica{db, hc, chainConfig, bc, transactionProducer, make(chan bool), consumer.TopicName()}, nil
+  return &Replica{db, hc, chainConfig, bc, transactionProducer, make(chan bool), consumer.TopicName(), maxOffsetAge, maxBlockAge}, nil
 }
 
-func NewKafkaReplica(db ethdb.Database, config *eth.Config, ctx *node.ServiceContext, kafkaSourceBroker []string, kafkaTopic, transactionTopic string, syncShutdown bool, startupAge int64) (*Replica, error) {
+func NewKafkaReplica(db ethdb.Database, config *eth.Config, ctx *node.ServiceContext, kafkaSourceBroker []string, kafkaTopic, transactionTopic string, syncShutdown bool, startupAge, offsetAge, blockAge int64) (*Replica, error) {
   topicParts := strings.Split(kafkaTopic, ":")
   kafkaTopic = topicParts[0]
   var offset int64
@@ -178,5 +189,5 @@ func NewKafkaReplica(db ethdb.Database, config *eth.Config, ctx *node.ServiceCon
   if err != nil {
     return nil, err
   }
-  return NewReplica(db, config, ctx, transactionProducer, consumer, syncShutdown, startupAge)
+  return NewReplica(db, config, ctx, transactionProducer, consumer, syncShutdown, startupAge, offsetAge, blockAge)
 }

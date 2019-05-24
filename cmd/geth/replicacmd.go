@@ -58,6 +58,8 @@ system and acts as an RPC node based on the replicated data.
 			utils.ReplicaSyncShutdownFlag,
 			utils.RPCCORSDomainFlag,
 			utils.ReplicaStartupMaxAgeFlag,
+			utils.ReplicaRuntimeMaxOffsetAgeFlag,
+			utils.ReplicaRuntimeMaxBlockAgeFlag,
 		},
 	}
 	replicaTxPoolConfig = core.TxPoolConfig{
@@ -165,6 +167,8 @@ func makeReplicaNode(ctx *cli.Context) (*node.Node, gethConfig) {
 			ctx.GlobalString(utils.KafkaTransactionTopicFlag.Name),
 			ctx.GlobalBool(utils.ReplicaSyncShutdownFlag.Name),
 			ctx.GlobalInt64(utils.ReplicaStartupMaxAgeFlag.Name),
+			ctx.GlobalInt64(utils.ReplicaRuntimeMaxOffsetAgeFlag.Name),
+			ctx.GlobalInt64(utils.ReplicaRuntimeMaxBlockAgeFlag.Name),
 		)
 	})
 	return stack, cfg

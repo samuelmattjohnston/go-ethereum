@@ -16,7 +16,7 @@ func TestReplicaConstants(t *testing.T) {
   db := ethdb.NewMemDatabase()
   config := eth.DefaultConfig
   config.Ethash.PowMode = ethash.ModeFake
-  replicaNode, err := replica.NewReplica(db, &config, nil, transactionProducer, consumer)
+  replicaNode, err := replica.NewReplica(db, &config, nil, transactionProducer, consumer, false, 0, 0, 0)
   if err != nil {
     t.Errorf(err.Error())
   }
@@ -37,7 +37,7 @@ func TestReplicaAPIs(t *testing.T) {
   db := ethdb.NewMemDatabase()
   config := eth.DefaultConfig
   config.Ethash.PowMode = ethash.ModeFake
-  replicaNode, err := replica.NewReplica(db, &config, nil, transactionProducer, consumer)
+  replicaNode, err := replica.NewReplica(db, &config, nil, transactionProducer, consumer, false, 0, 0, 0)
   if err != nil {
     t.Errorf(err.Error())
   }

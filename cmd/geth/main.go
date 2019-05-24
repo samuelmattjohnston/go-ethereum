@@ -142,6 +142,8 @@ var (
 		utils.KafkaTransactionConsumerGroupFlag,
 		utils.ReplicaSyncShutdownFlag,
 		utils.ReplicaStartupMaxAgeFlag,
+		utils.ReplicaRuntimeMaxOffsetAgeFlag,
+		utils.ReplicaRuntimeMaxBlockAgeFlag,
 	}
 
 	rpcFlags = []cli.Flag{

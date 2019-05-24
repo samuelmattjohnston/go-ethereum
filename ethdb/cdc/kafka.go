@@ -63,6 +63,7 @@ type KafkaLogConsumer struct {
   topic string
   batchHandler *BatchHandler
   ready chan struct{}
+  topicExists bool
 }
 
 func (consumer *KafkaLogConsumer) Messages() <-chan *Operation {
@@ -71,7 +72,7 @@ func (consumer *KafkaLogConsumer) Messages() <-chan *Operation {
   }
   inputChannel := consumer.consumer.Messages()
   consumer.batchHandler = NewBatchHandler()
-  if consumer.consumer.HighWaterMarkOffset() == 0 {
+  if !consumer.topicExists {
     consumer.ready <- struct{}{}
     consumer.ready = nil
   }
@@ -103,19 +104,24 @@ func (consumer *KafkaLogConsumer) TopicName() string {
   return consumer.topic
 }
 
-func NewKafkaLogConsumer(consumer sarama.Consumer, topic string, offset int64) (LogConsumer, error) {
+func NewKafkaLogConsumer(consumer sarama.Consumer, topic string, offset int64, client sarama.Client) (LogConsumer, error) {
   partitionConsumer, err := consumer.ConsumePartition(topic, 0, offset)
   if err != nil {
     return nil, err
   }
-  return &KafkaLogConsumer{partitionConsumer, topic, nil, make(chan struct{})}, nil
+  highOffset, _ := client.GetOffset(topic, 0, sarama.OffsetNewest)
+  return &KafkaLogConsumer{partitionConsumer, topic, nil, make(chan struct{}), (highOffset > 0)}, nil
 }
 
 func NewKafkaLogConsumerFromURLs(brokers []string, topic string, offset int64) (LogConsumer, error) {
   config := sarama.NewConfig()
-  consumer, err := sarama.NewConsumer(brokers, config)
+  client, err := sarama.NewClient(brokers, config)
   if err != nil {
     return nil, err
   }
-  return NewKafkaLogConsumer(consumer, topic, offset)
+  consumer, err := sarama.NewConsumerFromClient(client)
+  if err != nil {
+    return nil, err
+  }
+  return NewKafkaLogConsumer(consumer, topic, offset, client)
 }

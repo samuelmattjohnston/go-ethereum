@@ -618,6 +618,16 @@ var (
 		Usage: "Do not start serving RPC while the latest block exceeds this age in seconds",
 		Value: 0,
 	}
+	ReplicaRuntimeMaxOffsetAgeFlag = cli.Int64Flag{
+		Name: "replica.offset.age",
+		Usage: "If the replica has not received a message in this number of seconds, shut down.",
+		Value: 0,
+	}
+	ReplicaRuntimeMaxBlockAgeFlag = cli.Int64Flag{
+		Name: "replica.block.age",
+		Usage: "If the replica's current block is older than this number of seconds, shut down.",
+		Value: 0,
+	}
 
 	// Metrics flags
 	MetricsEnabledFlag = cli.BoolFlag{
