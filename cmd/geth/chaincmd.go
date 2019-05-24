@@ -37,6 +37,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/trie"
 	"github.com/syndtr/goleveldb/leveldb/util"
 	"gopkg.in/urfave/cli.v1"
@@ -560,6 +561,45 @@ func verifyStateTrie(ctx *cli.Context) error {
 			} else {
 				fmt.Printf("equal: %#x %#x\n", key,value)
 			}
+			// Check trie hashes for data in current trie
+			var data state.Account
+			if err := rlp.DecodeBytes(value, &data); err != nil {
+				panic(err)
+			}
+			subTr, err := trie.New(data.Root, trie.NewDatabase(db))
+			if err != nil {
+				log.Error(fmt.Sprintf("Unhandled trie error"))
+				return err
+			}
+
+			subIt := subTr.NodeIterator(nil)
+			subRoot := subTr.Hash()
+			for subIt.Next(true) {
+				if subIt.Leaf() {
+					subValue := subIt.LeafBlob()
+					subKey := subIt.LeafKey()
+					subProofDb := ethdb.NewMemDatabase()
+					// populate
+					if err := subTr.Prove(subKey, 0, subProofDb) ; err != nil {
+						return err
+					}
+					subProofValue, _, err := trie.VerifyProof(subRoot, subKey, subProofDb)
+					if err != nil {
+						return err
+					}
+					if !bytes.Equal(subValue,subProofValue) {
+						return fmt.Errorf("Values of proof and trie leaf are not equal: %#x %#x", subValue,subProofValue)
+					} else {
+						fmt.Printf("equal: %#x %#x\n", subKey,subValue)
+					}
+				}
+			}
+			if err := subIt.Error() ; err != nil {
+				return err
+			}
+		}
+		if err := it.Error() ; err != nil {
+			return err
 		}
 	}
 
