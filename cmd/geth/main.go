@@ -191,6 +191,7 @@ func init() {
 		removedbCommand,
 		dumpCommand,
 		setHeadCommand,
+		verifyStateTrieCommand,
 		// See monitorcmd.go:
 		monitorCommand,
 		// See accountcmd.go:

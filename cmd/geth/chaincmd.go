@@ -24,6 +24,7 @@ import (
 	"strconv"
 	"sync/atomic"
 	"time"
+	"bytes"
 
 	"github.com/ethereum/go-ethereum/cmd/utils"
 	"github.com/ethereum/go-ethereum/common"
@@ -188,6 +189,21 @@ Use "ethereum dump 0" to dump the genesis block.`,
 		Description: `
 The arguments are interpreted as block numbers, hashes, or a number of blocks to be rolled back.
 Use "ethereum sethead -2" to drop the two most recent blocks`,
+	}
+	verifyStateTrieCommand = cli.Command{
+		Action:    utils.MigrateFlags(verifyStateTrie),
+		Name:      "verifystatetrie",
+		Usage:     "Verfies the state trie",
+		Flags: []cli.Flag{
+			utils.DataDirFlag,
+			utils.CacheFlag,
+			utils.SyncModeFlag,
+			utils.KafkaLogBrokerFlag,
+			utils.KafkaLogTopicFlag,
+		},
+		Category: "BLOCKCHAIN COMMANDS",
+		Description: `
+Verify proofs of the latest block state trie. Exit 0 if correct, else exit 1`,
 	}
 )
 
@@ -512,6 +528,46 @@ func setHead(ctx *cli.Context) error {
 	return nil
 }
 
+func verifyStateTrie(ctx *cli.Context) error {
+	stack := makeFullNode(ctx)
+	bc, db := utils.MakeChain(ctx, stack)
+	latestHash := rawdb.ReadHeadBlockHash(db)
+	block := bc.GetBlockByHash(latestHash)
+
+	tr, err := trie.New(block.Root(), trie.NewDatabase(db))
+	if err != nil {
+		log.Error(fmt.Sprintf("Unhandled trie error"))
+		return err
+	}
+
+	it := tr.NodeIterator(nil)
+	root := tr.Hash()
+	for it.Next(true) {
+		if it.Leaf() {
+			value := it.LeafBlob()
+			key := it.LeafKey()
+			proofDb := ethdb.NewMemDatabase()
+			// populate
+			if err := tr.Prove(key, 0, proofDb) ; err != nil {
+				return err
+			}
+			proofValue, _, err := trie.VerifyProof(root, key, proofDb)
+			if err != nil {
+				return err
+			}
+			if !bytes.Equal(value,proofValue) {
+				return fmt.Errorf("Values of proof and trie leaf are not equal: %#x %#x", value,proofValue)
+			} else {
+				fmt.Printf("equal: %#x %#x\n", key,value)
+			}
+		}
+	}
+
+	bc.Stop()
+	db.Close()
+	// fmt.Printf("Rolled back chain to block %v\n", blockNumber)
+	return nil
+}
 // hashish returns true for strings that look like hashes.
 func hashish(x string) bool {
 	_, err := strconv.Atoi(x)
