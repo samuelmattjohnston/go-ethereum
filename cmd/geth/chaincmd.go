@@ -24,7 +24,6 @@ import (
 	"strconv"
 	"sync/atomic"
 	"time"
-	"bytes"
 
 	"github.com/ethereum/go-ethereum/cmd/utils"
 	"github.com/ethereum/go-ethereum/common"
@@ -37,7 +36,6 @@ import (
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/trie"
 	"github.com/syndtr/goleveldb/leveldb/util"
 	"gopkg.in/urfave/cli.v1"
@@ -199,8 +197,6 @@ Use "ethereum sethead -2" to drop the two most recent blocks`,
 			utils.DataDirFlag,
 			utils.CacheFlag,
 			utils.SyncModeFlag,
-			utils.VerifyTrieHashes,
-			utils.VerifySubtreeFlag,
 		},
 		Category: "BLOCKCHAIN COMMANDS",
 		Description: `
@@ -540,72 +536,31 @@ func verifyStateTrie(ctx *cli.Context) error {
 		log.Error(fmt.Sprintf("Unhandled trie error"))
 		return err
 	}
+	nodesToCheck := 1000000
+	if len(ctx.Args()) > 0 {
+		arg := ctx.Args()[0]
+		nodesToCheck, err = strconv.Atoi(arg)
+		if err != nil { return err }
+	}
 
-	it := tr.NodeIterator(nil)
-	root := tr.Hash()
-	counter := 0
-	for it.Next(true) {
-		if it.Leaf() {
-			counter++
-			if counter % 1000 == 0 {
-				log.Info("Leaves", "leaves", counter, "path", it.Path())
+	iterators := []trie.NodeIterator{}
+	for i := 0; i < 256; i++ {
+		iterators = append(iterators, tr.NodeIterator([]byte{byte(i)}))
+	}
+	for i := 0; i < nodesToCheck; i += len(iterators) {
+		log.Info("Checking leaves", "checked", i, "limit", nodesToCheck)
+		for _, it := range iterators {
+			for it.Next(true) {
+				if it.Leaf() {
+					break
+				}
 			}
-			if !ctx.GlobalBool(utils.VerifyTrieHashes.Name) { continue }
-			value := it.LeafBlob()
-			key := it.LeafKey()
-			proofDb := ethdb.NewMemDatabase()
-			// populate
-			if err := tr.Prove(key, 0, proofDb) ; err != nil {
+			if err := it.Error(); err != nil {
 				return err
-			}
-			proofValue, _, err := trie.VerifyProof(root, key, proofDb)
-			if err != nil {
-				return err
-			}
-			if !bytes.Equal(value,proofValue) {
-				return fmt.Errorf("Values of proof and trie leaf are not equal: %#x %#x", value,proofValue)
-			}
-			if ctx.GlobalBool(utils.VerifySubtreeFlag.Name) {
-				// Check trie hashes for data in current trie
-				var data state.Account
-				if err := rlp.DecodeBytes(value, &data); err != nil {
-					panic(err)
-				}
-				subTr, err := trie.New(data.Root, trie.NewDatabase(db))
-				if err != nil {
-					log.Error(fmt.Sprintf("Unhandled trie error"))
-					return err
-				}
-
-				subIt := subTr.NodeIterator(nil)
-				subRoot := subTr.Hash()
-				for subIt.Next(true) {
-					if subIt.Leaf() {
-						subValue := subIt.LeafBlob()
-						subKey := subIt.LeafKey()
-						subProofDb := ethdb.NewMemDatabase()
-						// populate
-						if err := subTr.Prove(subKey, 0, subProofDb) ; err != nil {
-							return err
-						}
-						subProofValue, _, err := trie.VerifyProof(subRoot, subKey, subProofDb)
-						if err != nil {
-							return err
-						}
-						if !bytes.Equal(subValue,subProofValue) {
-							return fmt.Errorf("Values of proof and trie leaf are not equal: %#x %#x", subValue,subProofValue)
-						}
-					}
-					if err := subIt.Error() ; err != nil {
-						return err
-					}
-				}
 			}
 		}
 	}
-	if err := it.Error() ; err != nil {
-		return err
-	}
+
 
 	bc.Stop()
 	db.Close()
