@@ -199,8 +199,8 @@ Use "ethereum sethead -2" to drop the two most recent blocks`,
 			utils.DataDirFlag,
 			utils.CacheFlag,
 			utils.SyncModeFlag,
-			utils.KafkaLogBrokerFlag,
-			utils.KafkaLogTopicFlag,
+			utils.VerifyTrieHashes,
+			utils.VerifySubtreeFlag,
 		},
 		Category: "BLOCKCHAIN COMMANDS",
 		Description: `
@@ -543,8 +543,14 @@ func verifyStateTrie(ctx *cli.Context) error {
 
 	it := tr.NodeIterator(nil)
 	root := tr.Hash()
+	counter := 0
 	for it.Next(true) {
 		if it.Leaf() {
+			counter++
+			if counter % 1000 == 0 {
+				log.Info("Leaves", "leaves", counter, "path", it.Path())
+			}
+			if !ctx.GlobalBool(utils.VerifyTrieHashes.Name) { continue }
 			value := it.LeafBlob()
 			key := it.LeafKey()
 			proofDb := ethdb.NewMemDatabase()
@@ -558,49 +564,47 @@ func verifyStateTrie(ctx *cli.Context) error {
 			}
 			if !bytes.Equal(value,proofValue) {
 				return fmt.Errorf("Values of proof and trie leaf are not equal: %#x %#x", value,proofValue)
-			} else {
-				fmt.Printf("equal: %#x %#x\n", key,value)
 			}
-			// Check trie hashes for data in current trie
-			var data state.Account
-			if err := rlp.DecodeBytes(value, &data); err != nil {
-				panic(err)
-			}
-			subTr, err := trie.New(data.Root, trie.NewDatabase(db))
-			if err != nil {
-				log.Error(fmt.Sprintf("Unhandled trie error"))
-				return err
-			}
+			if ctx.GlobalBool(utils.VerifySubtreeFlag.Name) {
+				// Check trie hashes for data in current trie
+				var data state.Account
+				if err := rlp.DecodeBytes(value, &data); err != nil {
+					panic(err)
+				}
+				subTr, err := trie.New(data.Root, trie.NewDatabase(db))
+				if err != nil {
+					log.Error(fmt.Sprintf("Unhandled trie error"))
+					return err
+				}
 
-			subIt := subTr.NodeIterator(nil)
-			subRoot := subTr.Hash()
-			for subIt.Next(true) {
-				if subIt.Leaf() {
-					subValue := subIt.LeafBlob()
-					subKey := subIt.LeafKey()
-					subProofDb := ethdb.NewMemDatabase()
-					// populate
-					if err := subTr.Prove(subKey, 0, subProofDb) ; err != nil {
-						return err
+				subIt := subTr.NodeIterator(nil)
+				subRoot := subTr.Hash()
+				for subIt.Next(true) {
+					if subIt.Leaf() {
+						subValue := subIt.LeafBlob()
+						subKey := subIt.LeafKey()
+						subProofDb := ethdb.NewMemDatabase()
+						// populate
+						if err := subTr.Prove(subKey, 0, subProofDb) ; err != nil {
+							return err
+						}
+						subProofValue, _, err := trie.VerifyProof(subRoot, subKey, subProofDb)
+						if err != nil {
+							return err
+						}
+						if !bytes.Equal(subValue,subProofValue) {
+							return fmt.Errorf("Values of proof and trie leaf are not equal: %#x %#x", subValue,subProofValue)
+						}
 					}
-					subProofValue, _, err := trie.VerifyProof(subRoot, subKey, subProofDb)
-					if err != nil {
+					if err := subIt.Error() ; err != nil {
 						return err
-					}
-					if !bytes.Equal(subValue,subProofValue) {
-						return fmt.Errorf("Values of proof and trie leaf are not equal: %#x %#x", subValue,subProofValue)
-					} else {
-						fmt.Printf("equal: %#x %#x\n", subKey,subValue)
 					}
 				}
 			}
-			if err := subIt.Error() ; err != nil {
-				return err
-			}
 		}
-		if err := it.Error() ; err != nil {
-			return err
-		}
+	}
+	if err := it.Error() ; err != nil {
+		return err
 	}
 
 	bc.Stop()

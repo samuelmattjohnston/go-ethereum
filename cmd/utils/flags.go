@@ -618,6 +618,14 @@ var (
 		Usage: "Do not start serving RPC while the latest block exceeds this age in seconds",
 		Value: 0,
 	}
+	VerifySubtreeFlag = cli.BoolFlag{
+		Name: "check.subtree",
+		Usage: "Verify account-specific state tries",
+	}
+	VerifyTrieHashes = cli.BoolFlag{
+		Name: "check.tree.hashes",
+		Usage: "Verify the state trie hashes, in addition to walking the trie",
+	}
 
 	// Metrics flags
 	MetricsEnabledFlag = cli.BoolFlag{
