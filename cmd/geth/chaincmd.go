@@ -189,6 +189,19 @@ Use "ethereum dump 0" to dump the genesis block.`,
 The arguments are interpreted as block numbers, hashes, or a number of blocks to be rolled back.
 Use "ethereum sethead -2" to drop the two most recent blocks`,
 	}
+	verifyStateTrieCommand = cli.Command{
+		Action:    utils.MigrateFlags(verifyStateTrie),
+		Name:      "verifystatetrie",
+		Usage:     "Verfies the state trie",
+		Flags: []cli.Flag{
+			utils.DataDirFlag,
+			utils.CacheFlag,
+			utils.SyncModeFlag,
+		},
+		Category: "BLOCKCHAIN COMMANDS",
+		Description: `
+Verify proofs of the latest block state trie. Exit 0 if correct, else exit 1`,
+	}
 )
 
 // initGenesis will initialise the given JSON format genesis file and writes it as
@@ -512,6 +525,48 @@ func setHead(ctx *cli.Context) error {
 	return nil
 }
 
+func verifyStateTrie(ctx *cli.Context) error {
+	stack := makeFullNode(ctx)
+	bc, db := utils.MakeChain(ctx, stack)
+	latestHash := rawdb.ReadHeadBlockHash(db)
+	block := bc.GetBlockByHash(latestHash)
+
+	tr, err := trie.New(block.Root(), trie.NewDatabase(db))
+	if err != nil {
+		log.Error(fmt.Sprintf("Unhandled trie error"))
+		return err
+	}
+	nodesToCheck := 1000000
+	if len(ctx.Args()) > 0 {
+		arg := ctx.Args()[0]
+		nodesToCheck, err = strconv.Atoi(arg)
+		if err != nil { return err }
+	}
+
+	iterators := []trie.NodeIterator{}
+	for i := 0; i < 256; i++ {
+		iterators = append(iterators, tr.NodeIterator([]byte{byte(i)}))
+	}
+	for i := 0; i < nodesToCheck; i += len(iterators) {
+		log.Info("Checking leaves", "checked", i, "limit", nodesToCheck)
+		for _, it := range iterators {
+			for it.Next(true) {
+				if it.Leaf() {
+					break
+				}
+			}
+			if err := it.Error(); err != nil {
+				return err
+			}
+		}
+	}
+
+
+	bc.Stop()
+	db.Close()
+	// fmt.Printf("Rolled back chain to block %v\n", blockNumber)
+	return nil
+}
 // hashish returns true for strings that look like hashes.
 func hashish(x string) bool {
 	_, err := strconv.Atoi(x)
