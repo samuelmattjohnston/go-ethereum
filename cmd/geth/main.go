@@ -148,6 +148,14 @@ var (
 		utils.EWASMInterpreterFlag,
 		utils.EVMInterpreterFlag,
 		configFileFlag,
+		utils.KafkaLogBrokerFlag,
+		utils.KafkaLogTopicFlag,
+		utils.KafkaTransactionTopicFlag,
+		utils.KafkaTransactionConsumerGroupFlag,
+		utils.ReplicaSyncShutdownFlag,
+		utils.ReplicaStartupMaxAgeFlag,
+		utils.ReplicaRuntimeMaxOffsetAgeFlag,
+		utils.ReplicaRuntimeMaxBlockAgeFlag,
 	}
 
 	rpcFlags = []cli.Flag{
@@ -208,6 +216,8 @@ func init() {
 		removedbCommand,
 		dumpCommand,
 		inspectCommand,
+		setHeadCommand,
+		verifyStateTrieCommand,
 		// See accountcmd.go:
 		accountCommand,
 		walletCommand,
@@ -224,6 +234,10 @@ func init() {
 		dumpConfigCommand,
 		// See retesteth.go
 		retestethCommand,
+		// See replica.go
+		replicaCommand,
+		// See txrelay.go
+		txrelayCommand,
 	}
 	sort.Sort(cli.CommandsByName(app.Commands))
 
