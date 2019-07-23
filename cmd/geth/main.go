@@ -218,6 +218,7 @@ func init() {
 		inspectCommand,
 		setHeadCommand,
 		verifyStateTrieCommand,
+		compactCommand,
 		// See accountcmd.go:
 		accountCommand,
 		walletCommand,
