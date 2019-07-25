@@ -2,6 +2,7 @@ package cdc_test
 
 import (
   "fmt"
+  "github.com/ethereum/go-ethereum/core/rawdb"
   "github.com/ethereum/go-ethereum/ethdb"
   "github.com/ethereum/go-ethereum/ethdb/cdc"
   "github.com/pborman/uuid"
@@ -40,6 +41,8 @@ func (batch *MockBatch) ValueSize() int {
 
 func (batch *MockBatch) Write() error { return nil }
 
+func (batch *MockBatch) Replay(w ethdb.KeyValueWriter) error { return nil }
+
 func (batch *MockBatch) Reset() {
   batch.operations = []cdc.BatchOperation{}
 }
@@ -77,7 +80,7 @@ func TestEncodePutOperation(t *testing.T) {
     }
     fmt.Sprintf("%s\n", op)
     checkOperations(op, t)
-    db := ethdb.NewMemDatabase()
+    db := rawdb.NewMemoryDatabase()
     err = op.Apply(db)
     if err != nil {
       t.Fatalf("operation.Apply failed: %v", err)
@@ -99,7 +102,7 @@ func TestEncodeDeleteOperation(t *testing.T) {
     }
     fmt.Sprintf("%s\n", op)
     checkOperations(op, t)
-    db := ethdb.NewMemDatabase()
+    db := rawdb.NewMemoryDatabase()
     db.Put([]byte(v), []byte(v))
     err = op.Apply(db)
     if err != nil {
@@ -128,7 +131,7 @@ func TestEncodeWriteOperation(t *testing.T) {
   op.Data = append(op.Data, data...)
   fmt.Sprintf("%s\n", op)
   checkOperations(op, t)
-  db := ethdb.NewMemDatabase()
+  db := rawdb.NewMemoryDatabase()
   db.Put([]byte("gone"), []byte("deleted"))
   err = op.Apply(db)
   if err != nil {

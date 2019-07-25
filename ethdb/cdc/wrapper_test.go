@@ -2,6 +2,7 @@ package cdc_test
 
 import (
   "github.com/ethereum/go-ethereum/ethdb"
+  "github.com/ethereum/go-ethereum/core/rawdb"
   "github.com/ethereum/go-ethereum/ethdb/cdc"
   "github.com/ethereum/go-ethereum/rlp"
   "testing"
@@ -15,7 +16,7 @@ func getTestWrapper() (ethdb.Database, cdc.LogConsumer, cdc.LogConsumer) {
   writeProducer, writeConsumer := cdc.MockLogPair()
   readProducer, readConsumer := cdc.MockLogPair()
   <-writeConsumer.Ready()
-  db := ethdb.NewMemDatabase()
+  db := rawdb.NewMemoryDatabase()
   return cdc.NewDBWrapper(db, writeProducer, readProducer), writeConsumer, readConsumer
 }
 
@@ -147,7 +148,7 @@ func TestDelete(t *testing.T) {
     t.Errorf("Unexpected Key: %v", op.Data)
   }
   if val, _ := db.Has([]byte("hello")); val {
-    t.Errorf("Key unexpectedly found in %s database")
+    t.Errorf("Key unexpectedly found in database")
   }
 }
 

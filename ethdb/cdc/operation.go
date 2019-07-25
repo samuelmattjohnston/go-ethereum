@@ -4,8 +4,10 @@ import (
   "bytes"
   "fmt"
   "encoding/binary"
+  "github.com/ethereum/go-ethereum/common"
   "github.com/ethereum/go-ethereum/ethdb"
   "github.com/ethereum/go-ethereum/rlp"
+  "github.com/ethereum/go-ethereum/log"
   "github.com/pborman/uuid"
   "errors"
   "time"
@@ -43,6 +45,7 @@ const (
 var (
   headerTracker = newValueTracker()
   blockTracker = newValueTracker()
+  lastBlockUpdate = time.Now()
 )
 
 
@@ -122,6 +125,7 @@ type Operation struct {
   Data []byte
   Offset int64
   Topic string
+  Timestamp time.Time
 }
 
 func updateOffset(putter ethdb.KeyValueWriter, op *Operation) error {
@@ -150,6 +154,10 @@ func (op *Operation) Apply(db ethdb.Database) error {
       // We have already recorded this block. Recording it again could create
       // inconsistencies.
       return nil
+    }
+    if bytes.Equal(kv.Key, []byte("LastBlock")) {
+      log.Info("Recording LastBlock", "hash", common.BytesToHash(kv.Value), "opTimestamp", op.Timestamp, "now", time.Now(), "delta", time.Since(op.Timestamp), "lastBlock", time.Since(lastBlockUpdate))
+      lastBlockUpdate = time.Now()
     }
     batch := db.NewBatch()
     if err := batch.Put(kv.Key, kv.Value); err != nil { return err }
@@ -268,11 +276,11 @@ func SyncOperation() (*Operation, error) {
 }
 
 func DeleteOperation(key []byte) (*Operation, error) {
-  return &Operation{OpDelete, key, 0, ""}, nil
+  return &Operation{OpDelete, key, 0, "", time.Now()}, nil
 }
 
 func HeartbeatOperation() (*Operation) {
-  return &Operation{OpHeartbeat, []byte{}, 0, ""}
+  return &Operation{OpHeartbeat, []byte{}, 0, "", time.Now()}
 }
 
 func WriteOperation(batch Batch) (*Operation, error) {
@@ -283,9 +291,9 @@ func WriteOperation(batch Batch) (*Operation, error) {
 }
 
 func GetOperation(key []byte) (*Operation, error) {
-  return &Operation{OpGet, key, 0, ""}, nil
+  return &Operation{OpGet, key, 0, "", time.Now()}, nil
 }
 
 func HasOperation(key []byte) (*Operation, error) {
-  return &Operation{OpHas, key, 0, ""}, nil
+  return &Operation{OpHas, key, 0, "", time.Now()}, nil
 }

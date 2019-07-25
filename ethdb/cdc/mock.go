@@ -2,6 +2,7 @@ package cdc
 
 import (
   "log"
+  "time"
 )
 
 type MockLogProducer struct {
@@ -26,7 +27,7 @@ func (consumer *MockLogConsumer) Messages() (<-chan *Operation) {
     go func() {
       counter := int64(0)
       for value := range consumer.channel {
-        if err := consumer.handler.ProcessInput(value, "mock", counter); err != nil {
+        if err := consumer.handler.ProcessInput(value, "mock", counter, time.Now()); err != nil {
           log.Printf(err.Error())
         }
         counter++

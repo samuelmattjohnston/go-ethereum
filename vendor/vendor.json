@@ -15,6 +15,12 @@
 			"revisionTime": "2018-07-12T00:56:34Z"
 		},
 		{
+			"checksumSHA1": "G4pYda+Zuy1wVNZ1NgOj7xuOpOE=",
+			"path": "github.com/Shopify/sarama/mocks",
+			"revision": "46c83074a05474240f9620fb7c70fb0d80ca401a",
+			"revisionTime": "2019-07-22T18:01:16Z"
+		},
+		{
 			"checksumSHA1": "QC55lHNOv1+UAL2xtIHw17MJ8J8=",
 			"path": "github.com/StackExchange/wmi",
 			"revision": "5d049714c4a64225c3c79a7cf7d02f7fb5b96338",
