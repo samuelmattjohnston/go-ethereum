@@ -4,8 +4,10 @@ import (
   "bytes"
   "fmt"
   "encoding/binary"
+  "github.com/ethereum/go-ethereum/common"
   "github.com/ethereum/go-ethereum/ethdb"
   "github.com/ethereum/go-ethereum/rlp"
+  "github.com/ethereum/go-ethereum/log"
   "github.com/pborman/uuid"
   "errors"
   "time"
@@ -38,11 +40,20 @@ const (
   OpAppendAncient byte = 6
   OpTruncateAncients byte = 7
   OpSync byte = 8
+  MinBlockAge = 80 * time.Millisecond
 )
 
 var (
   headerTracker = newValueTracker()
   blockTracker = newValueTracker()
+  lastBlockUpdate = time.Now()
+  lastBlockOffset int64
+  lastBlockWrites int64
+  lastLog = time.Time{}
+  blocksSinceLastLog = 0
+  applyTime = time.Since(time.Now())
+  betweenTime = time.Since(time.Now())
+  lastApply = time.Now()
 )
 
 
@@ -122,6 +133,7 @@ type Operation struct {
   Data []byte
   Offset int64
   Topic string
+  Timestamp time.Time
 }
 
 func updateOffset(putter ethdb.KeyValueWriter, op *Operation) error {
@@ -136,65 +148,86 @@ func updateOffset(putter ethdb.KeyValueWriter, op *Operation) error {
   }
   return nil
 }
-func (op *Operation) Apply(db ethdb.Database) error {
+func (op *Operation) Apply(db ethdb.Database) ([]byte, error) {
+  betweenTime += time.Since(lastApply)
+  applyStart := time.Now()
+  lastBlockWrites++
   switch op.Op {
   case OpPut:
     kv := &KeyValue{}
-    if err := rlp.DecodeBytes(op.Data, kv); err != nil { return err }
+    if err := rlp.DecodeBytes(op.Data, kv); err != nil { return nil, err }
     if bytes.Equal(kv.Key, []byte("LastHeader")) && !headerTracker.add(kv.Value){
       // We have already recorded this header. Recording it again could create
       // inconsistencies.
-      return nil
+      return nil, nil
     }
     if bytes.Equal(kv.Key, []byte("LastBlock")) && !blockTracker.add(kv.Value){
       // We have already recorded this block. Recording it again could create
       // inconsistencies.
-      return nil
+      return nil, nil
     }
-    batch := db.NewBatch()
-    if err := batch.Put(kv.Key, kv.Value); err != nil { return err }
-    if err := updateOffset(batch, op); err != nil { return err }
-    if err := batch.Write(); err != nil { return err }
+    if bytes.Equal(kv.Key, []byte("LastBlock")) {
+      if time.Since(lastLog) > 1 * time.Second {
+        log.Info("Recording LastBlock", "hash", common.BytesToHash(kv.Value), "delta", time.Since(op.Timestamp), "lastBlock", time.Since(lastBlockUpdate), "offset", op.Offset, "offsetDelta", op.Offset - lastBlockOffset, "writes", lastBlockWrites, "blocks", blocksSinceLastLog, "applyTime", applyTime, "betweenTime", betweenTime)
+        applyTime = time.Since(time.Now())
+        betweenTime = time.Since(time.Now())
+        blocksSinceLastLog = 0
+        lastLog = time.Now()
+      }
+      blocksSinceLastLog++
+      lastBlockUpdate = time.Now()
+      lastBlockOffset = op.Offset
+      lastBlockWrites = 1
+      batch := db.NewBatch()
+      if err := batch.Put(kv.Key, kv.Value); err != nil { return nil, err }
+      if err := updateOffset(batch, op); err != nil { return nil, err }
+      // To help ensure consistency across replicas, don't apply this operation
+      // until MinBlockAge (80ms) after it was emitted by the master. If this
+      // number is <= 0, it will not pause.
+      time.Sleep(MinBlockAge - time.Since(op.Timestamp))
+      if err := batch.Write(); err != nil { return nil, err }
+      return kv.Value, nil
+    }
+    if err := db.Put(kv.Key, kv.Value); err != nil { return nil, err }
   case OpDelete:
     // For OpDelete, op.Data is the key to be deleted
     db.Delete(op.Data)
-    if err := updateOffset(db, op); err != nil { return err }
   case OpAppendAncient:
     a := &AncientData{}
-    if err := rlp.DecodeBytes(op.Data, a); err != nil { return err }
-    if err := db.AppendAncient(a.Number, a.Hash, a.Header, a.Body, a.Receipt, a.Td); err != nil { return err}
+    if err := rlp.DecodeBytes(op.Data, a); err != nil { return nil, err }
+    if err := db.AppendAncient(a.Number, a.Hash, a.Header, a.Body, a.Receipt, a.Td); err != nil { return nil, err}
   case OpTruncateAncients:
     var n uint64
-    if err := rlp.DecodeBytes(op.Data, &n); err != nil { return err }
-    if err := db.TruncateAncients(n); err != nil { return err }
+    if err := rlp.DecodeBytes(op.Data, &n); err != nil { return nil, err }
+    if err := db.TruncateAncients(n); err != nil { return nil, err }
   case OpSync:
-    if err := db.Sync(); err != nil { return err }
-    if err := updateOffset(db, op);  err != nil { return err }
+    if err := db.Sync(); err != nil { return nil, err }
   case OpWrite:
     batch := db.NewBatch()
     var operations []BatchOperation
-    if err := rlp.DecodeBytes(op.Data[16:], &operations); err != nil { return err }
+    if err := rlp.DecodeBytes(op.Data[16:], &operations); err != nil { return nil, err }
     for _, bop := range operations {
       switch bop.Op {
       case OpPut:
         kv := &KeyValue{}
-        if err := rlp.DecodeBytes(bop.Data, kv); err != nil { return err }
-        if err := batch.Put(kv.Key, kv.Value); err != nil { return err }
+        if err := rlp.DecodeBytes(bop.Data, kv); err != nil { return nil, err }
+        if err := batch.Put(kv.Key, kv.Value); err != nil { return nil, err }
       case OpDelete:
-        if err := batch.Delete(bop.Data); err != nil { return err }
+        if err := batch.Delete(bop.Data); err != nil { return nil, err }
       default:
         fmt.Printf("Unsupported operation: %#x", bop.Op)
       }
 
     }
-    if err := updateOffset(batch, op); err != nil { return err }
-    if err := batch.Write(); err != nil { return err }
+    if err := batch.Write(); err != nil { return nil, err }
   case OpHeartbeat:
-    return updateOffset(db, op)
+    return nil, updateOffset(db, op)
   default:
     fmt.Printf("Unknown operation: %v \n", op)
   }
-  return nil
+  applyTime += time.Since(applyStart)
+  lastApply = time.Now()
+  return nil, nil
 }
 
 func (op *Operation) Bytes() ([]byte) {
@@ -268,11 +301,11 @@ func SyncOperation() (*Operation, error) {
 }
 
 func DeleteOperation(key []byte) (*Operation, error) {
-  return &Operation{OpDelete, key, 0, ""}, nil
+  return &Operation{OpDelete, key, 0, "", time.Now()}, nil
 }
 
 func HeartbeatOperation() (*Operation) {
-  return &Operation{OpHeartbeat, []byte{}, 0, ""}
+  return &Operation{OpHeartbeat, []byte{}, 0, "", time.Now()}
 }
 
 func WriteOperation(batch Batch) (*Operation, error) {
@@ -283,9 +316,9 @@ func WriteOperation(batch Batch) (*Operation, error) {
 }
 
 func GetOperation(key []byte) (*Operation, error) {
-  return &Operation{OpGet, key, 0, ""}, nil
+  return &Operation{OpGet, key, 0, "", time.Now()}, nil
 }
 
 func HasOperation(key []byte) (*Operation, error) {
-  return &Operation{OpHas, key, 0, ""}, nil
+  return &Operation{OpHas, key, 0, "", time.Now()}, nil
 }

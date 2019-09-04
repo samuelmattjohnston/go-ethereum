@@ -4,6 +4,7 @@ import (
   "fmt"
   "github.com/ethereum/go-ethereum/rlp"
   "github.com/ethereum/go-ethereum/log"
+  "time"
 )
 
 type BatchHandler struct {
@@ -11,7 +12,7 @@ type BatchHandler struct {
   batches map[string][]BatchOperation
 }
 
-func (consumer *BatchHandler) ProcessInput(value []byte, topic string, offset int64) error {
+func (consumer *BatchHandler) ProcessInput(value []byte, topic string, offset int64, timestamp time.Time) error {
   if value[0] == 255 {
     batchValue := make([]byte, len(value))
     copy(batchValue[:], value[:])
@@ -41,6 +42,7 @@ func (consumer *BatchHandler) ProcessInput(value []byte, topic string, offset in
     if err != nil {
       return fmt.Errorf("Message(topic=%v, offset=%v) is not a valid operation: %v\n", topic, offset, err.Error())
     }
+    op.Timestamp = timestamp
     consumer.outputChannel <- op
   }
   return nil

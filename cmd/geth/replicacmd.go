@@ -18,16 +18,23 @@ package main
 
 import (
 	// "fmt"
+	"path/filepath"
 	"time"
 	"github.com/ethereum/go-ethereum/cmd/utils"
 	"github.com/ethereum/go-ethereum/core"
+	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/consensus/ethash"
 	"github.com/ethereum/go-ethereum/eth"
+	"github.com/ethereum/go-ethereum/ethdb"
+	"github.com/ethereum/go-ethereum/ethdb/overlay"
+	"github.com/ethereum/go-ethereum/ethdb/devnull"
+	"github.com/ethereum/go-ethereum/ethdb/memorydb"
 	replicaModule "github.com/ethereum/go-ethereum/replica"
 	"github.com/ethereum/go-ethereum/eth/gasprice"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/eth/downloader"
 	"github.com/ethereum/go-ethereum/dashboard"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/p2p/nat"
 	whisper "github.com/ethereum/go-ethereum/whisper/whisperv6"
@@ -60,9 +67,20 @@ system and acts as an RPC node based on the replicated data.
 			utils.RPCPortFlag,
 			utils.RPCListenAddrFlag,
 			utils.RPCCORSDomainFlag,
+			utils.WSEnabledFlag,
+			utils.WSListenAddrFlag,
+			utils.WSPortFlag,
+			utils.WSAllowedOriginsFlag,
+			utils.GraphQLEnabledFlag,
+			utils.GraphQLListenAddrFlag,
+			utils.GraphQLPortFlag,
+			utils.GraphQLCORSDomainFlag,
+			utils.GraphQLVirtualHostsFlag,
 			utils.ReplicaStartupMaxAgeFlag,
 			utils.ReplicaRuntimeMaxOffsetAgeFlag,
 			utils.ReplicaRuntimeMaxBlockAgeFlag,
+			utils.OverlayFlag,
+			utils.AncientFlag,
 		},
 	}
 	replicaTxPoolConfig = core.TxPoolConfig{
@@ -157,9 +175,42 @@ func makeReplicaNode(ctx *cli.Context) (*node.Node, gethConfig) {
 	utils.SetShhConfig(ctx, stack, &cfg.Shh)
 	utils.SetDashboardConfig(ctx, &cfg.Dashboard)
 	stack.Register(func (sctx *node.ServiceContext) (node.Service, error) {
-		chainDb, err := sctx.OpenRawDatabaseWithFreezer("chaindata", cfg.Eth.DatabaseCache, cfg.Eth.DatabaseHandles, cfg.Eth.DatabaseFreezer, "eth/db/chaindata/")
+		log.Info("Opening leveldb")
+		var chainKv ethdb.KeyValueStore
+		var err error
+		chainKv, err = rawdb.NewLevelDBDatabase(sctx.ResolvePath("chaindata"), cfg.Eth.DatabaseCache, cfg.Eth.DatabaseHandles, "eth/db/chaindata")
+		// chainKv, err := sctx.OpenRawDatabaseWithFreezer("chaindata", cfg.Eth.DatabaseCache, cfg.Eth.DatabaseHandles, cfg.Eth.DatabaseFreezer, "eth/db/chaindata/")
 		if err != nil {
 			utils.Fatalf("Could not open database: %v", err)
+		}
+		if cfg.Eth.DatabaseOverlay != "" {
+			log.Info("Opening overlay folder", "path", cfg.Eth.DatabaseOverlay)
+			var overlayKv ethdb.KeyValueStore
+			var err error
+			if cfg.Eth.DatabaseOverlay == "null" {
+				overlayKv = devnull.New()
+			} else if cfg.Eth.DatabaseOverlay == "mem" {
+				overlayKv = memorydb.New()
+			} else {
+				overlayKv, err = rawdb.NewLevelDBDatabase(cfg.Eth.DatabaseOverlay, cfg.Eth.DatabaseCache, cfg.Eth.DatabaseHandles, "eth/db/chaindata/overlay/")
+			}
+			if err != nil {
+				utils.Fatalf("Failed to create overlaydb", err)
+			}
+			log.Info("Constructing Overlay")
+			chainKv = overlay.NewOverlayWrapperDB(overlayKv, chainKv)
+		}
+		root := sctx.ResolvePath("chaindata")
+		freezer := cfg.Eth.DatabaseFreezer
+		switch {
+		case freezer == "":
+			freezer = filepath.Join(root, "ancient")
+		case !filepath.IsAbs(freezer):
+			freezer = sctx.ResolvePath(freezer)
+		}
+		chainDb, err := rawdb.NewDatabaseWithFreezer(chainKv, freezer, "eth/db/chaindata")
+		if err != nil {
+			utils.Fatalf("Could not open freezer: %v", err)
 		}
 	  return replicaModule.NewKafkaReplica(
 			chainDb,
@@ -172,6 +223,11 @@ func makeReplicaNode(ctx *cli.Context) (*node.Node, gethConfig) {
 			ctx.GlobalInt64(utils.ReplicaStartupMaxAgeFlag.Name),
 			ctx.GlobalInt64(utils.ReplicaRuntimeMaxOffsetAgeFlag.Name),
 			ctx.GlobalInt64(utils.ReplicaRuntimeMaxBlockAgeFlag.Name),
+			ctx.GlobalBool(utils.GraphQLEnabledFlag.Name),
+			cfg.Node.GraphQLEndpoint(),
+			cfg.Node.GraphQLCors,
+			cfg.Node.GraphQLVirtualHosts,
+			cfg.Node.HTTPTimeouts,
 		)
 	})
 	return stack, cfg

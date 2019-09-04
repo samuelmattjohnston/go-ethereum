@@ -94,6 +94,7 @@ func CreateTopicIfDoesNotExist(brokerAddr, topic string) error {
 
 func NewKafkaLogProducerFromURLs(brokers []string, topic string) (LogProducer, error) {
   config := sarama.NewConfig()
+  config.Version = sarama.V2_1_0_0
   if err := CreateTopicIfDoesNotExist(brokers[0], topic); err != nil {
     return nil, err
   }
@@ -137,7 +138,7 @@ func (consumer *KafkaLogConsumer) Messages() <-chan *Operation {
           consumer.ready = nil
         }
       }
-      if err := consumer.batchHandler.ProcessInput(input.Value, input.Topic, input.Offset); err != nil {
+      if err := consumer.batchHandler.ProcessInput(input.Value, input.Topic, input.Offset, input.Timestamp); err != nil {
         log.Error(err.Error())
       }
     }
@@ -162,7 +163,10 @@ func NewKafkaLogConsumer(consumer sarama.Consumer, topic string, offset int64, c
   if err != nil {
     return nil, err
   }
-  highOffset, _ := client.GetOffset(topic, 0, sarama.OffsetNewest)
+  var highOffset int64
+  if client != nil {
+    highOffset, _ = client.GetOffset(topic, 0, sarama.OffsetNewest)
+  }
   return &KafkaLogConsumer{partitionConsumer, topic, nil, make(chan struct{}), (highOffset > 0)}, nil
 }
 
@@ -171,6 +175,7 @@ func NewKafkaLogConsumerFromURLs(brokers []string, topic string, offset int64) (
   if err := CreateTopicIfDoesNotExist(brokers[0], topic); err != nil {
     return nil, err
   }
+  config.Version = sarama.V2_1_0_0
   client, err := sarama.NewClient(brokers, config)
   if err != nil {
     return nil, err

@@ -24,7 +24,7 @@ func TestEmit(t *testing.T) {
 func TestConsumer(t *testing.T) {
   consumer := mocks.NewConsumer(t, nil)
   consumerPartition := consumer.ExpectConsumePartition("test", 0, 0)
-  logConsumer, err := cdc.NewKafkaLogConsumer(consumer, "test", 0)
+  logConsumer, err := cdc.NewKafkaLogConsumer(consumer, "test", 0, nil)
   if err != nil { t.Fatalf(err.Error() )}
   defer logConsumer.Close()
   if err != nil { t.Fatalf(err.Error() )}
