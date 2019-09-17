@@ -20,6 +20,7 @@ import (
 	// "fmt"
 	"path/filepath"
 	"time"
+	"math/big"
 	"github.com/ethereum/go-ethereum/cmd/utils"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/rawdb"
@@ -81,6 +82,7 @@ system and acts as an RPC node based on the replicated data.
 			utils.ReplicaRuntimeMaxBlockAgeFlag,
 			utils.OverlayFlag,
 			utils.AncientFlag,
+			utils.OverrideIstanbulFlag,
 		},
 	}
 	replicaTxPoolConfig = core.TxPoolConfig{
@@ -152,6 +154,9 @@ func makeReplicaNode(ctx *cli.Context) (*node.Node, gethConfig) {
 		Shh:       whisper.DefaultConfig,
 		Node:      replicaNodeConfig(),
 		Dashboard: dashboard.DefaultConfig,
+	}
+	if ctx.GlobalIsSet(utils.OverrideIstanbulFlag.Name) {
+		cfg.Eth.OverrideIstanbul = new(big.Int).SetUint64(ctx.GlobalUint64(utils.OverrideIstanbulFlag.Name))
 	}
 
 	// Load config file.
