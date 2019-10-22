@@ -221,7 +221,7 @@ func makeReplicaNode(ctx *cli.Context) (*node.Node, gethConfig) {
 			chainDb,
 			&cfg.Eth,
 			sctx,
-			[]string{ctx.GlobalString(utils.KafkaLogBrokerFlag.Name)},
+			ctx.GlobalString(utils.KafkaLogBrokerFlag.Name),
 			ctx.GlobalString(utils.KafkaLogTopicFlag.Name),
 			ctx.GlobalString(utils.KafkaTransactionTopicFlag.Name),
 			ctx.GlobalBool(utils.ReplicaSyncShutdownFlag.Name),

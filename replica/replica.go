@@ -181,7 +181,7 @@ func NewReplica(db ethdb.Database, config *eth.Config, ctx *node.ServiceContext,
   return replica, err
 }
 
-func NewKafkaReplica(db ethdb.Database, config *eth.Config, ctx *node.ServiceContext, kafkaSourceBroker []string, kafkaTopic, transactionTopic string, syncShutdown bool, startupAge, offsetAge, blockAge int64, graphqlEnabled bool, graphqlEndpoint string, graphqlCors []string, graphqlVirtualHosts []string, timeout rpc.HTTPTimeouts) (*Replica, error) {
+func NewKafkaReplica(db ethdb.Database, config *eth.Config, ctx *node.ServiceContext, kafkaSourceBroker, kafkaTopic, transactionTopic string, syncShutdown bool, startupAge, offsetAge, blockAge int64, graphqlEnabled bool, graphqlEndpoint string, graphqlCors []string, graphqlVirtualHosts []string, timeout rpc.HTTPTimeouts) (*Replica, error) {
   topicParts := strings.Split(kafkaTopic, ":")
   kafkaTopic = topicParts[0]
   var offset int64
@@ -205,7 +205,7 @@ func NewKafkaReplica(db ethdb.Database, config *eth.Config, ctx *node.ServiceCon
       if bytesRead <= 0 { return nil, errors.New("Offset buffer too small") }
     }
   }
-  consumer, err := cdc.NewKafkaLogConsumerFromURLs(
+  consumer, err := cdc.NewKafkaLogConsumerFromURL(
     kafkaSourceBroker,
     kafkaTopic,
     offset,

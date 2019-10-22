@@ -42,12 +42,11 @@ func (producer *KafkaTransactionProducer) String() string {
   return fmt.Sprintf("KafkaTransactionProducer Topic DEBUG: %v", producer.topic)
 }
 
-func NewKafkaTransactionProducerFromURLs(brokers []string, topic string) (TransactionProducer, error) {
-  if err := cdc.CreateTopicIfDoesNotExist(brokers[0], topic); err != nil {
+func NewKafkaTransactionProducerFromURLs(brokerURL, topic string) (TransactionProducer, error) {
+  brokers, config := cdc.ParseKafkaURL(brokerURL)
+  if err := cdc.CreateTopicIfDoesNotExist(brokerURL, topic); err != nil {
     return nil, err
   }
-  config := sarama.NewConfig()
-  config.Producer.Return.Successes=true
   producer, err := sarama.NewSyncProducer(brokers, config)
   if err != nil {
     return nil, err

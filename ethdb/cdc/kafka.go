@@ -3,8 +3,26 @@ package cdc
 import (
   "github.com/Shopify/sarama"
   "github.com/ethereum/go-ethereum/log"
+  "net/url"
+  "strings"
   "time"
 )
+
+
+func ParseKafkaURL(brokerURL string) ([]string, *sarama.Config) {
+  parsedURL, _ := url.Parse("kafka://" + brokerURL)
+  config := sarama.NewConfig()
+  config.Version = sarama.V2_1_0_0
+  if parsedURL.Query().Get("tls") == "1" {
+    config.Net.TLS.Enable = true
+  }
+  if parsedURL.User != nil {
+    config.Net.SASL.Enable = true
+    config.Net.SASL.User = parsedURL.User.Username()
+    config.Net.SASL.Password, _ = parsedURL.User.Password()
+  }
+  return strings.Split(parsedURL.Host, ","), config
+}
 
 type KafkaLogProducer struct {
   producer sarama.AsyncProducer
@@ -43,9 +61,8 @@ func (producer *KafkaLogProducer) Emit(data []byte) error {
 }
 
 func CreateTopicIfDoesNotExist(brokerAddr, topic string) error {
-  config := sarama.NewConfig()
-	config.Version = sarama.V2_1_0_0
-  client, err := sarama.NewClient([]string{brokerAddr}, config)
+  brokerList, config := ParseKafkaURL(brokerAddr)
+  client, err := sarama.NewClient(brokerList, config)
   if err != nil {
     return err
   }
@@ -92,9 +109,8 @@ func CreateTopicIfDoesNotExist(brokerAddr, topic string) error {
   return nil
 }
 
-func NewKafkaLogProducerFromURLs(brokers []string, topic string) (LogProducer, error) {
-  config := sarama.NewConfig()
-  config.Version = sarama.V2_1_0_0
+func NewKafkaLogProducerFromURL(brokerURL, topic string) (LogProducer, error) {
+  brokers, config := ParseKafkaURL(brokerURL)
   if err := CreateTopicIfDoesNotExist(brokers[0], topic); err != nil {
     return nil, err
   }
@@ -170,8 +186,8 @@ func NewKafkaLogConsumer(consumer sarama.Consumer, topic string, offset int64, c
   return &KafkaLogConsumer{partitionConsumer, topic, nil, make(chan struct{}), (highOffset > 0)}, nil
 }
 
-func NewKafkaLogConsumerFromURLs(brokers []string, topic string, offset int64) (LogConsumer, error) {
-  config := sarama.NewConfig()
+func NewKafkaLogConsumerFromURL(brokerURL, topic string, offset int64) (LogConsumer, error) {
+  brokers, config := ParseKafkaURL(brokerURL)
   if err := CreateTopicIfDoesNotExist(brokers[0], topic); err != nil {
     return nil, err
   }

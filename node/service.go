@@ -50,8 +50,8 @@ func (ctx *ServiceContext) OpenDatabase(name string, cache int, handles int, nam
 	} else {
 		db, err = rawdb.NewLevelDBDatabase(ctx.config.ResolvePath(name), cache, handles, namespace)
 		if ctx.config.KafkaLogBroker != "" {
-	   producer, err := cdc.NewKafkaLogProducerFromURLs(
-	           []string{ctx.config.KafkaLogBroker},
+	   producer, err := cdc.NewKafkaLogProducerFromURL(
+	           ctx.config.KafkaLogBroker,
 	           ctx.config.KafkaLogTopic,
 	   )
 	   if err != nil { return nil, err }
@@ -71,8 +71,8 @@ func (ctx *ServiceContext) OpenDatabase(name string, cache int, handles int, nam
 func (ctx *ServiceContext) OpenDatabaseWithFreezer(name string, cache int, handles int, freezer string, namespace string) (ethdb.Database, error) {
 	db, err := ctx.OpenRawDatabaseWithFreezer(name, cache, handles, freezer, namespace)
 	if ctx.config.KafkaLogBroker != "" {
-   producer, err := cdc.NewKafkaLogProducerFromURLs(
-           []string{ctx.config.KafkaLogBroker},
+   producer, err := cdc.NewKafkaLogProducerFromURL(
+           ctx.config.KafkaLogBroker,
            ctx.config.KafkaLogTopic,
    )
    if err != nil { return nil, err }
