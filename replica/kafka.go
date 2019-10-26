@@ -47,6 +47,7 @@ func NewKafkaTransactionProducerFromURLs(brokerURL, topic string) (TransactionPr
   if err := cdc.CreateTopicIfDoesNotExist(brokerURL, topic); err != nil {
     return nil, err
   }
+  config.Producer.Return.Successes=true
   producer, err := sarama.NewSyncProducer(brokers, config)
   if err != nil {
     return nil, err
