@@ -187,6 +187,45 @@ func (backend *ReplicaBackend) SendTx(ctx context.Context, signedTx *types.Trans
   if backend.transactionProducer == nil {
     return errors.New("This api is not configured for accepting transactions")
   }
+  currentState, header, err := backend.StateAndHeaderByNumber(ctx, rpc.LatestBlockNumber)
+  if err != nil {
+    return err
+  }
+  msg, err := signedTx.AsMessage(types.MakeSigner(backend.chainConfig, header.Number))
+  if err != nil {
+    return err
+  }
+  if n := currentState.GetNonce(msg.From()); n > signedTx.Nonce() {
+    return core.ErrNonceTooLow
+  }
+
+  // Check the transaction doesn't exceed the current
+  // block limit gas.
+  if header.GasLimit < signedTx.Gas() {
+    return core.ErrGasLimit
+  }
+
+  // Transactions can't be negative. This may never happen
+  // using RLP decoded transactions but may occur if you create
+  // a transaction using the RPC for example.
+  if signedTx.Value().Sign() < 0 {
+    return core.ErrNegativeValue
+  }
+
+  // Transactor should have enough funds to cover the costs
+  // cost == V + GP * GL
+  if b := currentState.GetBalance(msg.From()); b.Cmp(signedTx.Cost()) < 0 {
+    return core.ErrInsufficientFunds
+  }
+
+  // Should supply enough intrinsic gas
+  gas, err := core.IntrinsicGas(signedTx.Data(), signedTx.To() == nil, true, backend.chainConfig.IsIstanbul(header.Number))
+  if err != nil {
+    return err
+  }
+  if signedTx.Gas() < gas {
+    return core.ErrIntrinsicGas
+  }
   return backend.transactionProducer.Emit(signedTx)
 }
 
