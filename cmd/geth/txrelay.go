@@ -57,18 +57,17 @@ func txrelay(ctx *cli.Context) error {
 	if rpcEndpoint == "" {
 		rpcEndpoint = fmt.Sprintf("%s/.ethereum/geth.ipc", os.Getenv("HOME"))
 	}
-	broker := ctx.GlobalString(utils.KafkaLogBrokerFlag.Name)
+	brokerURL := ctx.GlobalString(utils.KafkaLogBrokerFlag.Name)
+	brokers, config := cdc.ParseKafkaURL(brokerURL)
 	topic := ctx.GlobalString(utils.KafkaTransactionTopicFlag.Name)
 	consumerGroupID := ctx.GlobalString(utils.KafkaTransactionConsumerGroupFlag.Name)
-	config := sarama.NewConfig()
-	config.Version = sarama.V2_1_0_0
-	if err := cdc.CreateTopicIfDoesNotExist(broker, topic); err != nil {
+	if err := cdc.CreateTopicIfDoesNotExist(brokerURL, topic); err != nil {
 		fmt.Println("Error creating topic")
 		return err
 	}
-	consumerGroup, err := sarama.NewConsumerGroup([]string{broker}, consumerGroupID, config)
+	consumerGroup, err := sarama.NewConsumerGroup(brokers, consumerGroupID, config)
 	if err != nil {
-		fmt.Printf("Looks like %v isn't available\n", broker)
+		fmt.Printf("Looks like %v isn't available\n", brokerURL)
 		return err
 	}
 	defer consumerGroup.Close()
