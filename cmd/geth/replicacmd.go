@@ -83,6 +83,10 @@ system and acts as an RPC node based on the replicated data.
 			utils.OverlayFlag,
 			utils.AncientFlag,
 			utils.OverrideIstanbulFlag,
+			utils.CacheFlag,
+			utils.CacheTrieFlag,
+			utils.CacheGCFlag,
+			utils.CacheDatabaseFlag,
 		},
 	}
 	replicaTxPoolConfig = core.TxPoolConfig{
@@ -110,8 +114,9 @@ system and acts as an RPC node based on the replicated data.
 		},
 		NetworkId:     1,
 		LightPeers:    0,
-		DatabaseCache: 0,
-		TrieDirtyCache:     0,
+		DatabaseCache:      512,
+		TrieCleanCache:     0,
+		TrieDirtyCache:     512,
 		TrieTimeout:   5 * time.Minute,
 		// GasPrice:      big.NewInt(18 * params.Shannon),
 
@@ -183,7 +188,8 @@ func makeReplicaNode(ctx *cli.Context) (*node.Node, gethConfig) {
 		log.Info("Opening leveldb")
 		var chainKv ethdb.KeyValueStore
 		var err error
-		chainKv, err = rawdb.NewLevelDBDatabase(sctx.ResolvePath("chaindata"), cfg.Eth.DatabaseCache, cfg.Eth.DatabaseHandles, "eth/db/chaindata")
+		log.Info("Allocating DB", "path", sctx.ResolvePath("chaindata"), "dbcache", cfg.Eth.DatabaseCache, "handles", cfg.Eth.DatabaseHandles)
+		chainKv, err = rawdb.NewLevelDBDatabase(sctx.ResolvePath("chaindata"), cfg.Eth.DatabaseCache * 3 / 4, cfg.Eth.DatabaseHandles, "eth/db/chaindata")
 		// chainKv, err := sctx.OpenRawDatabaseWithFreezer("chaindata", cfg.Eth.DatabaseCache, cfg.Eth.DatabaseHandles, cfg.Eth.DatabaseFreezer, "eth/db/chaindata/")
 		if err != nil {
 			utils.Fatalf("Could not open database: %v", err)
@@ -197,7 +203,8 @@ func makeReplicaNode(ctx *cli.Context) (*node.Node, gethConfig) {
 			} else if cfg.Eth.DatabaseOverlay == "mem" {
 				overlayKv = memorydb.New()
 			} else {
-				overlayKv, err = rawdb.NewLevelDBDatabase(cfg.Eth.DatabaseOverlay, cfg.Eth.DatabaseCache, cfg.Eth.DatabaseHandles, "eth/db/chaindata/overlay/")
+				log.Info("Cache size", "dbcache", cfg.Eth.DatabaseCache)
+				overlayKv, err = rawdb.NewLevelDBDatabase(cfg.Eth.DatabaseOverlay, cfg.Eth.DatabaseCache * 1 / 4, cfg.Eth.DatabaseHandles, "eth/db/chaindata/overlay/")
 			}
 			if err != nil {
 				utils.Fatalf("Failed to create overlaydb", err)
