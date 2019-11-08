@@ -368,6 +368,38 @@ func (backend *ReplicaBackend) findCommonAncestor(newHead, oldHead *types.Block)
   }
 }
 
+func (backend *ReplicaBackend) HeaderByNumberOrHash(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash) (*types.Header, error) {
+  if num, ok := blockNrOrHash.Number(); ok {
+    return backend.HeaderByNumber(ctx, num)
+  }
+  if hash, ok := blockNrOrHash.Hash(); ok {
+    return backend.HeaderByHash(ctx, hash)
+  }
+  return nil, fmt.Errorf("Invalid block number or hash")
+}
+func (backend *ReplicaBackend) BlockByNumberOrHash(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash) (*types.Block, error) {
+  if num, ok := blockNrOrHash.Number(); ok {
+    return backend.BlockByNumber(ctx, num)
+  }
+  if hash, ok := blockNrOrHash.Hash(); ok {
+    return backend.BlockByHash(ctx, hash)
+  }
+  return nil, fmt.Errorf("Invalid block number or hash")
+}
+func (backend *ReplicaBackend) StateAndHeaderByNumberOrHash(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash) (*state.StateDB, *types.Header, error) {
+  if num, ok := blockNrOrHash.Number(); ok {
+    return backend.StateAndHeaderByNumber(ctx, num)
+  }
+  if hash, ok := blockNrOrHash.Hash(); ok {
+    header, err := backend.HeaderByHash(ctx, hash)
+    if err != nil {
+      return nil, nil, err
+    }
+    return backend.StateAndHeaderByNumber(ctx, rpc.BlockNumber(header.Number.Int64()))
+  }
+  return nil, nil, fmt.Errorf("Invalid block number or hash")
+}
+
 func NewTestReplicaBackend(db ethdb.Database, hc *core.HeaderChain, bc *core.BlockChain, tp TransactionProducer) (*ReplicaBackend) {
   backend := &ReplicaBackend{
     db: db,
