@@ -34,6 +34,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/eth/downloader"
+	"github.com/ethereum/go-ethereum/ethdb/pogreb"
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/trie"
@@ -225,6 +226,19 @@ Verify proofs of the latest block state trie. Exit 0 if correct, else exit 1`,
      Action:    utils.MigrateFlags(compact),
      Name:      "compactdb",
      Usage:     "Compacts the database",
+     Flags: []cli.Flag{
+       utils.DataDirFlag,
+       utils.CacheFlag,
+       utils.SyncModeFlag,
+     },
+     Category: "BLOCKCHAIN COMMANDS",
+     Description: `
+Compacts the database`,
+	}
+	toPogrebCommand = cli.Command{
+     Action:    utils.MigrateFlags(pogrebMigrate),
+     Name:      "to-pogreb",
+     Usage:     "Converts the database to pogreb",
      Flags: []cli.Flag{
        utils.DataDirFlag,
        utils.CacheFlag,
@@ -661,6 +675,24 @@ func compact(ctx *cli.Context) error {
   _, db := utils.MakeChain(ctx, stack)
 	start := time.Now()
 	err := db.Compact(nil, nil)
+	log.Info("Done", "time", time.Since(start))
+	return err
+}
+
+func pogrebMigrate(ctx *cli.Context) error {
+  stack := makeFullNode(ctx)
+  _, db := utils.MakeChain(ctx, stack)
+	newDb, err := pogreb.NewDatabase(ctx.Args().First())
+	if err != nil { return err }
+	start := time.Now()
+	it := db.NewIterator()
+	for it.Next() {
+		if err := it.Error(); err != nil {
+			return err
+		}
+		newDb.Put(it.Key(), it.Value())
+	}
+	newDb.Close()
 	log.Info("Done", "time", time.Since(start))
 	return err
 }
