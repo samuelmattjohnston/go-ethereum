@@ -16,6 +16,11 @@
 
 package main
 
+// import (
+// 	_ "net/http/pprof" // TODO: Disable this
+// 	"net/http"
+// )
+
 import (
 	// "fmt"
 	"path/filepath"
@@ -80,9 +85,15 @@ system and acts as an RPC node based on the replicated data.
 			utils.ReplicaStartupMaxAgeFlag,
 			utils.ReplicaRuntimeMaxOffsetAgeFlag,
 			utils.ReplicaRuntimeMaxBlockAgeFlag,
+			utils.ReplicaEVMConcurrencyFlag,
+			utils.ReplicaWarmAddressesFlag,
 			utils.OverlayFlag,
 			utils.AncientFlag,
 			utils.OverrideIstanbulFlag,
+			utils.CacheFlag,
+			utils.CacheTrieFlag,
+			utils.CacheGCFlag,
+			utils.CacheDatabaseFlag,
 		},
 	}
 	replicaTxPoolConfig = core.TxPoolConfig{
@@ -110,8 +121,9 @@ system and acts as an RPC node based on the replicated data.
 		},
 		NetworkId:     1,
 		LightPeers:    0,
-		DatabaseCache: 0,
-		TrieDirtyCache:     0,
+		DatabaseCache:      512,
+		TrieCleanCache:     0,
+		TrieDirtyCache:     512,
 		TrieTimeout:   5 * time.Minute,
 		// GasPrice:      big.NewInt(18 * params.Shannon),
 
@@ -140,6 +152,9 @@ system and acts as an RPC node based on the replicated data.
 )
 // replica starts replica node
 func replica(ctx *cli.Context) error {
+	// go func() {
+	// 	log.Info("Serving", "err", http.ListenAndServe("0.0.0.0:6060", nil))
+	// }()
 	node, _ := makeReplicaNode(ctx)
 	utils.StartNode(node)
 	node.Wait()
@@ -183,7 +198,8 @@ func makeReplicaNode(ctx *cli.Context) (*node.Node, gethConfig) {
 		log.Info("Opening leveldb")
 		var chainKv ethdb.KeyValueStore
 		var err error
-		chainKv, err = rawdb.NewLevelDBDatabase(sctx.ResolvePath("chaindata"), cfg.Eth.DatabaseCache, cfg.Eth.DatabaseHandles, "eth/db/chaindata")
+		log.Info("Allocating DB", "path", sctx.ResolvePath("chaindata"), "dbcache", cfg.Eth.DatabaseCache, "handles", cfg.Eth.DatabaseHandles)
+		chainKv, err = rawdb.NewLevelDBDatabase(sctx.ResolvePath("chaindata"), cfg.Eth.DatabaseCache * 3 / 4, cfg.Eth.DatabaseHandles, "eth/db/chaindata")
 		// chainKv, err := sctx.OpenRawDatabaseWithFreezer("chaindata", cfg.Eth.DatabaseCache, cfg.Eth.DatabaseHandles, cfg.Eth.DatabaseFreezer, "eth/db/chaindata/")
 		if err != nil {
 			utils.Fatalf("Could not open database: %v", err)
@@ -197,7 +213,8 @@ func makeReplicaNode(ctx *cli.Context) (*node.Node, gethConfig) {
 			} else if cfg.Eth.DatabaseOverlay == "mem" {
 				overlayKv = memorydb.New()
 			} else {
-				overlayKv, err = rawdb.NewLevelDBDatabase(cfg.Eth.DatabaseOverlay, cfg.Eth.DatabaseCache, cfg.Eth.DatabaseHandles, "eth/db/chaindata/overlay/")
+				log.Info("Cache size", "dbcache", cfg.Eth.DatabaseCache)
+				overlayKv, err = rawdb.NewLevelDBDatabase(cfg.Eth.DatabaseOverlay, cfg.Eth.DatabaseCache * 1 / 4, cfg.Eth.DatabaseHandles, "eth/db/chaindata/overlay/")
 			}
 			if err != nil {
 				utils.Fatalf("Failed to create overlaydb", err)
@@ -221,7 +238,7 @@ func makeReplicaNode(ctx *cli.Context) (*node.Node, gethConfig) {
 			chainDb,
 			&cfg.Eth,
 			sctx,
-			[]string{ctx.GlobalString(utils.KafkaLogBrokerFlag.Name)},
+			ctx.GlobalString(utils.KafkaLogBrokerFlag.Name),
 			ctx.GlobalString(utils.KafkaLogTopicFlag.Name),
 			ctx.GlobalString(utils.KafkaTransactionTopicFlag.Name),
 			ctx.GlobalBool(utils.ReplicaSyncShutdownFlag.Name),
@@ -233,6 +250,8 @@ func makeReplicaNode(ctx *cli.Context) (*node.Node, gethConfig) {
 			cfg.Node.GraphQLCors,
 			cfg.Node.GraphQLVirtualHosts,
 			cfg.Node.HTTPTimeouts,
+			int(ctx.GlobalInt64(utils.ReplicaEVMConcurrencyFlag.Name)),
+			ctx.GlobalString(utils.ReplicaWarmAddressesFlag.Name),
 		)
 	})
 	return stack, cfg

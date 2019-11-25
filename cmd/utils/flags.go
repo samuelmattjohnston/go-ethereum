@@ -746,6 +746,15 @@ var (
 		 Usage: "If the replica's current block is older than this number of seconds, shut down.",
 		 Value: 0,
 	}
+	ReplicaEVMConcurrencyFlag = cli.Int64Flag{
+		 Name: "replica.evm.concurrency",
+		 Usage: "How many EVM instances may run in parallel",
+		 Value: 0,
+	}
+	ReplicaWarmAddressesFlag = cli.StringFlag{
+		 Name: "replica.warm.addresses",
+		 Usage: "A file containing a JSON list of addresses to warm before running the replica",
+	}
 
 
 	// Metrics flags
@@ -1507,9 +1516,12 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *eth.Config) {
 	if gcmode := ctx.GlobalString(GCModeFlag.Name); gcmode != "full" && gcmode != "archive" {
 		Fatalf("--%s must be either 'full' or 'archive'", GCModeFlag.Name)
 	}
-	cfg.NoPruning = ctx.GlobalString(GCModeFlag.Name) == "archive"
-	cfg.NoPrefetch = ctx.GlobalBool(CacheNoPrefetchFlag.Name)
-
+	if ctx.GlobalIsSet(GCModeFlag.Name) {
+		cfg.NoPruning = ctx.GlobalString(GCModeFlag.Name) == "archive"
+	}
+	if ctx.GlobalIsSet(CacheNoPrefetchFlag.Name) {
+		cfg.NoPrefetch = ctx.GlobalBool(CacheNoPrefetchFlag.Name)
+	}
 	if ctx.GlobalIsSet(CacheFlag.Name) || ctx.GlobalIsSet(CacheTrieFlag.Name) {
 		cfg.TrieCleanCache = ctx.GlobalInt(CacheFlag.Name) * ctx.GlobalInt(CacheTrieFlag.Name) / 100
 	}

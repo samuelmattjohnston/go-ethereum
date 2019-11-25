@@ -9,7 +9,7 @@ import (
 )
 
 func main() {
-  consumer, err := cdc.NewKafkaLogConsumerFromURLs(os.Args[1:2], "geth", 0)
+  consumer, err := cdc.NewKafkaLogConsumerFromURL(os.Args[1], "geth", 0)
   if err != nil {
     log.Fatalf("%v", err.Error())
   }

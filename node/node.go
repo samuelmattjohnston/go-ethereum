@@ -619,8 +619,8 @@ func (n *Node) OpenDatabase(name string, cache, handles int, namespace string) (
 		return db, err
 	}
  if n.config.KafkaLogBroker != "" {
-		producer, err := cdc.NewKafkaLogProducerFromURLs(
-						[]string{n.config.KafkaLogBroker},
+		producer, err := cdc.NewKafkaLogProducerFromURL(
+						n.config.KafkaLogBroker,
 						n.config.KafkaLogTopic,
 				)
 		if err != nil { return nil, err }
@@ -655,8 +655,8 @@ func (n *Node) OpenDatabaseWithFreezer(name string, cache, handles int, freezer,
 		}
 	}
   if n.config.KafkaLogBroker != "" {
-    producer, err := cdc.NewKafkaLogProducerFromURLs(
-            []string{n.config.KafkaLogBroker},
+    producer, err := cdc.NewKafkaLogProducerFromURL(
+            n.config.KafkaLogBroker,
             n.config.KafkaLogTopic,
     )
     if err != nil { return nil, err }

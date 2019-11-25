@@ -23,6 +23,8 @@ import (
   "github.com/ethereum/go-ethereum/core/rawdb"
   "github.com/ethereum/go-ethereum/params"
   "github.com/ethereum/go-ethereum/log"
+  "github.com/ethereum/go-ethereum/trie"
+  "runtime"
   "time"
 )
 
@@ -46,6 +48,7 @@ type ReplicaBackend struct {
   chainHeadFeed event.Feed
   chainSideFeed event.Feed
   newTxsFeed    event.Feed
+  evmSemaphore chan struct{}
 }
 
 	// General Ethereum API
@@ -140,6 +143,9 @@ func (backend *ReplicaBackend) GetTd(blockHash common.Hash) *big.Int {
 func (backend *ReplicaBackend) GetEVM(ctx context.Context, msg core.Message, state *state.StateDB, header *types.Header) (*vm.EVM, func() error, error) {
   state.SetBalance(msg.From(), math.MaxBig256)
   vmError := func() error {
+    if backend.evmSemaphore != nil {
+      <-backend.evmSemaphore
+    }
     if err := state.Error(); err != nil {
       return err
     }
@@ -147,7 +153,11 @@ func (backend *ReplicaBackend) GetEVM(ctx context.Context, msg core.Message, sta
   }
 
   context := core.NewEVMContext(msg, header, backend.bc, nil)
-  return vm.NewEVM(context, state, backend.chainConfig, *backend.bc.GetVMConfig()), vmError, nil
+  evm := vm.NewEVM(context, state, backend.chainConfig, *backend.bc.GetVMConfig())
+  if backend.evmSemaphore != nil {
+    backend.evmSemaphore <- struct{}{}
+  }
+  return evm, vmError, nil
 }
 
 func (backend *ReplicaBackend) GetLogs(ctx context.Context, blockHash common.Hash) ([][]*types.Log, error) {
@@ -340,6 +350,73 @@ func (backend *ReplicaBackend) GetTransaction(ctx context.Context, txHash common
 	return tx, blockHash, blockNumber, index, nil
 }
 
+// warmAddresses makes sure that the state tries for the specified list of
+// addresses has been walked. This ensures that the storage for these addresses
+// are not stored on a cold snapshot, and depending on available trie cache it
+// may put the storage into RAM
+func (backend *ReplicaBackend) warmAddresses(addresses []common.Address) error {
+  stateDB, _, err := backend.StateAndHeaderByNumber(context.Background(), rpc.LatestBlockNumber)
+  if err != nil {
+    return err
+  }
+  iterators := make(chan trie.NodeIterator)
+  go func() {
+    tries := []state.Trie{}
+    for _, address := range addresses {
+      tr := stateDB.StorageTrie(address)
+      if tr == nil {
+        continue
+      }
+      tries = append(tries, tr)
+    }
+    for i := 0; i < 256; i++ {
+      for _, tr := range tries {
+        iterators <- tr.NodeIterator([]byte{byte(i)})
+      }
+      log.Info("Dispatched iterator batch", "count", i, "limit", 256)
+    }
+    close(iterators)
+  }()
+  for i := 0; i < runtime.NumCPU(); i++ {
+    go func () {
+      for it := range iterators {
+        for j := 0; j < 10; j++ {
+          for it.Next(true) {
+            if it.Leaf() {
+              break
+            }
+          }
+        }
+      }
+    }()
+  }
+  // addressChan := make(chan common.Address)
+  // var wg sync.WaitGroup
+  // for i := 0; i < runtime.NumCPU(); i++ {
+  //   wg.Add(1)
+  //   go func() {
+  //     for address := range addressChan {
+  //       stateDB, _, err := backend.StateAndHeaderByNumber(context.Background(), rpc.LatestBlockNumber)
+  //       if err != nil {
+  //         log.Warn("Error getting state. skipping", "err", err, "address", address)
+  //         continue
+  //       }
+  //       trie := stateDB.StorageTrie(address)
+  //       iterator := trie.NodeIterator(nil)
+  //       for iterator.Next(true) {}
+  //     }
+  //     wg.Done()
+  //   }()
+  // }
+  // for i, address := range addresses {
+  //   addressChan <- address
+  //   log.Info("Dispatched address for warming", "count", i)
+  // }
+  // close(addressChan)
+  // wg.Wait()
+  return nil
+}
+
 func (backend *ReplicaBackend) handleBlockUpdates() {
   var lastBlock *types.Block
   for head := range backend.blockHeads {
@@ -405,6 +482,38 @@ func (backend *ReplicaBackend) findCommonAncestor(newHead, oldHead *types.Block)
       return oldHead, reverted, newBlocks, fmt.Errorf("Reached genesis without finding common ancestor")
     }
   }
+}
+
+func (backend *ReplicaBackend) HeaderByNumberOrHash(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash) (*types.Header, error) {
+  if num, ok := blockNrOrHash.Number(); ok {
+    return backend.HeaderByNumber(ctx, num)
+  }
+  if hash, ok := blockNrOrHash.Hash(); ok {
+    return backend.HeaderByHash(ctx, hash)
+  }
+  return nil, fmt.Errorf("Invalid block number or hash")
+}
+func (backend *ReplicaBackend) BlockByNumberOrHash(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash) (*types.Block, error) {
+  if num, ok := blockNrOrHash.Number(); ok {
+    return backend.BlockByNumber(ctx, num)
+  }
+  if hash, ok := blockNrOrHash.Hash(); ok {
+    return backend.BlockByHash(ctx, hash)
+  }
+  return nil, fmt.Errorf("Invalid block number or hash")
+}
+func (backend *ReplicaBackend) StateAndHeaderByNumberOrHash(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash) (*state.StateDB, *types.Header, error) {
+  if num, ok := blockNrOrHash.Number(); ok {
+    return backend.StateAndHeaderByNumber(ctx, num)
+  }
+  if hash, ok := blockNrOrHash.Hash(); ok {
+    header, err := backend.HeaderByHash(ctx, hash)
+    if err != nil {
+      return nil, nil, err
+    }
+    return backend.StateAndHeaderByNumber(ctx, rpc.BlockNumber(header.Number.Int64()))
+  }
+  return nil, nil, fmt.Errorf("Invalid block number or hash")
 }
 
 func NewTestReplicaBackend(db ethdb.Database, hc *core.HeaderChain, bc *core.BlockChain, tp TransactionProducer) (*ReplicaBackend) {
