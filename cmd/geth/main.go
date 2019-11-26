@@ -42,6 +42,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/node"
+	replicaModule "github.com/ethereum/go-ethereum/replica"
 	cli "gopkg.in/urfave/cli.v1"
 )
 
@@ -152,6 +153,7 @@ var (
 		configFileFlag,
 		utils.KafkaLogBrokerFlag,
 		utils.KafkaLogTopicFlag,
+		utils.KafkaTransactionPoolTopicFlag,
 		utils.KafkaTransactionTopicFlag,
 		utils.KafkaTransactionConsumerGroupFlag,
 		utils.ReplicaSyncShutdownFlag,
@@ -452,6 +454,16 @@ func startNode(ctx *cli.Context, stack *node.Node) {
 			gasprice = utils.GlobalBig(ctx, utils.MinerGasPriceFlag.Name)
 		}
 		ethereum.TxPool().SetGasPrice(gasprice)
+
+		if brokerURL := ctx.GlobalString("KafkaLogBrokerFlag"); brokerURL != "" {
+			if poolTopic := ctx.GlobalString("KafkaLogBrokerFlag"); poolTopic != "" {
+				producer, err := replicaModule.NewKafkaTransactionProducerFromURLs(brokerURL, poolTopic)
+				if err != nil {
+					utils.Fatalf("Failed to create transaction producer for %v - %v", brokerURL, poolTopic)
+				}
+				producer.RelayTransactions(ethereum.TxPool())
+			}
+		}
 
 		threads := ctx.GlobalInt(utils.MinerLegacyThreadsFlag.Name)
 		if ctx.GlobalIsSet(utils.MinerThreadsFlag.Name) {

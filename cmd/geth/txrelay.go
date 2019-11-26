@@ -107,3 +107,9 @@ func (h relayConsumerGroup) ConsumeClaim(sess sarama.ConsumerGroupSession, claim
   }
   return nil
 }
+
+type KafkaTransactionConsumer struct {
+  producer sarama.SyncProducer
+  // TODO;  sarama.SyncProducer
+  topic string
+}
