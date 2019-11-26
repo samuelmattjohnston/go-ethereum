@@ -35,6 +35,7 @@ type ReplicaBackend struct {
   chainConfig *params.ChainConfig
   bc *core.BlockChain
   transactionProducer TransactionProducer
+  transactionConsumer TransactionConsumer
   eventMux *event.TypeMux
   dl *downloader.Downloader
   bloomRequests chan chan *bloombits.Retrieval
@@ -47,8 +48,8 @@ type ReplicaBackend struct {
   chainFeed event.Feed
   chainHeadFeed event.Feed
   chainSideFeed event.Feed
-  newTxsFeed    event.Feed
   evmSemaphore chan struct{}
+  txPool *core.TxPool
 }
 
 	// General Ethereum API
@@ -291,14 +292,22 @@ func (backend *ReplicaBackend) ServiceFilter(ctx context.Context, session *bloom
 
 	// Read replicas won't have the p2p functionality, so these will be noops
 
-	// Return an empty transactions list
+	// GetPoolTransactions returns all pending tranactions in the pool
 func (backend *ReplicaBackend) GetPoolTransactions() (types.Transactions, error) {
-  return nil, nil
+  pending, err := backend.txPool.Pending()
+  if err != nil {
+    return nil, err
+  }
+  var txs types.Transactions
+  for _, batch := range pending {
+    txs = append(txs, batch...)
+  }
+  return txs, nil
 }
 
-	// Return nil
+	// GetPoolTransaction returns the specified transaction if it's in the transaction pool
 func (backend *ReplicaBackend) GetPoolTransaction(txHash common.Hash) *types.Transaction {
-  return nil
+  return backend.txPool.Get(txHash)
 }
 
 	// Generate core.state.managed_state object from current state, and get nonce from that
@@ -322,12 +331,12 @@ func (backend *ReplicaBackend) RPCGasCap() *big.Int {
 
 	// Return empty maps
 func (backend *ReplicaBackend) TxPoolContent() (map[common.Address]types.Transactions, map[common.Address]types.Transactions) {
-  return make(map[common.Address]types.Transactions), make(map[common.Address]types.Transactions)
+  return backend.txPool.Content()
 }
 
 	// Not sure how to stub out subscriptions
 func (backend *ReplicaBackend) SubscribeNewTxsEvent(ch chan<- core.NewTxsEvent) event.Subscription {
-  return backend.newTxsFeed.Subscribe(ch)
+  return backend.txPool.SubscribeNewTxsEvent(ch)
 }
 
 func (backend *ReplicaBackend) ChainConfig() *params.ChainConfig {
@@ -456,6 +465,22 @@ func (backend *ReplicaBackend) handleBlockUpdates() {
       backend.chainHeadFeed.Send(core.ChainHeadEvent{block})
     }
   }
+}
+
+func (backend *ReplicaBackend) consumeTransactions(transactionConsumer TransactionConsumer) error {
+  pool, err := core.NewReplicaTxPool(core.DefaultTxPoolConfig, backend.chainConfig, backend.bc, backend)
+  backend.txPool = pool
+  if err != nil {
+    return err
+  }
+  if transactionConsumer != nil {
+    go func() {
+      for tx := range transactionConsumer.Messages() {
+        backend.txPool.AddRemote(tx)
+      }
+      }()
+  }
+  return nil
 }
 
 func (backend *ReplicaBackend) findCommonAncestor(newHead, oldHead *types.Block) (*types.Block, types.Blocks, types.Blocks, error) {

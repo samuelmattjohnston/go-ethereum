@@ -61,7 +61,7 @@ func txrelay(ctx *cli.Context) error {
 	brokers, config := cdc.ParseKafkaURL(brokerURL)
 	topic := ctx.GlobalString(utils.KafkaTransactionTopicFlag.Name)
 	consumerGroupID := ctx.GlobalString(utils.KafkaTransactionConsumerGroupFlag.Name)
-	if err := cdc.CreateTopicIfDoesNotExist(brokerURL, topic); err != nil {
+	if err := cdc.CreateTopicIfDoesNotExist(brokerURL, topic, 6); err != nil {
 		fmt.Println("Error creating topic")
 		return err
 	}

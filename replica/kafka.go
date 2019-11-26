@@ -60,7 +60,7 @@ func (producer *KafkaTransactionProducer) RelayTransactions(txpool *core.TxPool)
 
 func NewKafkaTransactionProducerFromURLs(brokerURL, topic string) (TransactionProducer, error) {
   brokers, config := cdc.ParseKafkaURL(brokerURL)
-  if err := cdc.CreateTopicIfDoesNotExist(brokerURL, topic); err != nil {
+  if err := cdc.CreateTopicIfDoesNotExist(brokerURL, topic, 6); err != nil {
     return nil, err
   }
   config.Producer.Return.Successes=true
@@ -100,7 +100,6 @@ func (consumer *KafkaTransactionConsumer) Messages() <-chan *types.Transaction {
       go func() {
         for msg := range partitionConsumer.Messages() {
           transaction := &types.Transaction{}
-          fmt.Printf("Msg: %v\n", msg)
           if err := rlp.DecodeBytes(msg.Value, transaction); err != nil {
             fmt.Printf("Error decoding: %v\n", err.Error())
           }
@@ -118,7 +117,7 @@ func (consumer *KafkaTransactionConsumer) Close() {
 
 func NewKafkaTransactionConsumerFromURLs(brokerURL, topic string) (TransactionConsumer, error) {
   brokers, config := cdc.ParseKafkaURL(brokerURL)
-  if err := cdc.CreateTopicIfDoesNotExist(brokerURL, topic); err != nil {
+  if err := cdc.CreateTopicIfDoesNotExist(brokerURL, topic, 6); err != nil {
     return nil, err
   }
   client, err := sarama.NewClient(brokers, config)
