@@ -476,7 +476,9 @@ func (backend *ReplicaBackend) consumeTransactions(transactionConsumer Transacti
   if transactionConsumer != nil {
     go func() {
       for tx := range transactionConsumer.Messages() {
-        backend.txPool.AddRemote(tx)
+        if err := backend.txPool.AddRemote(tx); err != nil {
+          log.Warn("Error adding tx to pool", "tx", tx.Hash(), "error", err)
+        }
       }
       }()
   }

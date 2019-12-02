@@ -157,7 +157,10 @@ func (r *Replica) Start(server *p2p.Server) error {
       log.Info("Replica Sync", "num", currentBlock.Number(), "hash", currentBlock.Hash(), "blockAge", common.PrettyAge(time.Unix(int64(currentBlock.Time()), 0)), "offset", offset, "offsetAge", common.PrettyAge(time.Unix(offsetTimestamp, 0)))
     }
   }()
-  return r.graphql.Start(server)
+  if r.graphql != nil {
+    return r.graphql.Start(server)
+  }
+  return nil
 }
 func (r *Replica) Stop() error {
   r.db.Close()

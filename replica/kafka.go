@@ -24,19 +24,14 @@ func (producer *KafkaTransactionProducer) Close() {
 
 func (producer *KafkaTransactionProducer) Emit(tx *types.Transaction) error {
   txBytes, err := rlp.EncodeToBytes(tx)
-  fmt.Printf("%#x\n", txBytes)
   if err != nil {
     return err
   }
-  // select {
     msg :=  &sarama.ProducerMessage{Topic: producer.topic, Value: sarama.ByteEncoder(txBytes)}
-    partition, offset, err := producer.producer.SendMessage(msg)
+    _, _, err = producer.producer.SendMessage(msg)
     if err != nil {
       return err
     }
-    fmt.Printf("Message is stored in topic(%s)/partition(%d)/offset(%d)\n", producer.topic, partition, offset)
-
-  // }
   return nil
 }
 
@@ -54,13 +49,16 @@ func (producer *KafkaTransactionProducer) RelayTransactions(txpool *core.TxPool)
         producer.Emit(tx)
       }
     }
+    log.Warn("Transaction emitter shutting down")
     subscription.Unsubscribe()
   }()
 }
 
 func NewKafkaTransactionProducerFromURLs(brokerURL, topic string) (TransactionProducer, error) {
+  configEntries := make(map[string]*string)
+  configEntries["retention.ms"] = strPtr("3600000")
   brokers, config := cdc.ParseKafkaURL(brokerURL)
-  if err := cdc.CreateTopicIfDoesNotExist(brokerURL, topic, 6); err != nil {
+  if err := cdc.CreateTopicIfDoesNotExist(brokerURL, topic, 6, configEntries); err != nil {
     return nil, err
   }
   config.Producer.Return.Successes=true
@@ -115,9 +113,13 @@ func (consumer *KafkaTransactionConsumer) Close() {
   consumer.consumer.Close()
 }
 
+func strPtr(x string) *string { return &x }
+
 func NewKafkaTransactionConsumerFromURLs(brokerURL, topic string) (TransactionConsumer, error) {
+  configEntries := make(map[string]*string)
+  configEntries["retention.ms"] = strPtr("3600000")
   brokers, config := cdc.ParseKafkaURL(brokerURL)
-  if err := cdc.CreateTopicIfDoesNotExist(brokerURL, topic, 6); err != nil {
+  if err := cdc.CreateTopicIfDoesNotExist(brokerURL, topic, 6, configEntries); err != nil {
     return nil, err
   }
   client, err := sarama.NewClient(brokers, config)

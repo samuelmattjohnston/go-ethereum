@@ -439,7 +439,7 @@ func startNode(ctx *cli.Context, stack *node.Node) {
 	}
 
 	// Start auxiliary services if enabled
-	if ctx.GlobalBool(utils.MiningEnabledFlag.Name) || ctx.GlobalBool(utils.DeveloperFlag.Name) {
+	if ctx.GlobalBool(utils.MiningEnabledFlag.Name) || ctx.GlobalBool(utils.DeveloperFlag.Name) || ctx.GlobalBool(utils.DeveloperFlag.Name) || ctx.GlobalString(utils.KafkaTransactionPoolTopicFlag.Name) != "" {
 		// Mining only makes sense if a full Ethereum node is running
 		if ctx.GlobalString(utils.SyncModeFlag.Name) == "light" {
 			utils.Fatalf("Light clients do not support mining")
@@ -455,22 +455,29 @@ func startNode(ctx *cli.Context, stack *node.Node) {
 		}
 		ethereum.TxPool().SetGasPrice(gasprice)
 
-		if brokerURL := ctx.GlobalString("KafkaLogBrokerFlag"); brokerURL != "" {
-			if poolTopic := ctx.GlobalString("KafkaLogBrokerFlag"); poolTopic != "" {
+		if brokerURL := ctx.GlobalString(utils.KafkaLogBrokerFlag.Name); brokerURL != "" {
+			if poolTopic := ctx.GlobalString(utils.KafkaTransactionPoolTopicFlag.Name); poolTopic != "" {
 				producer, err := replicaModule.NewKafkaTransactionProducerFromURLs(brokerURL, poolTopic)
 				if err != nil {
 					utils.Fatalf("Failed to create transaction producer for %v - %v", brokerURL, poolTopic)
 				}
+				log.Info("Starting Kafka Transaction Relay", "broker", brokerURL, "topic", poolTopic)
 				producer.RelayTransactions(ethereum.TxPool())
+			} else {
+				log.Info("Pool topic missing")
 			}
+		} else {
+			log.Info("Broker url missing")
 		}
 
 		threads := ctx.GlobalInt(utils.MinerLegacyThreadsFlag.Name)
 		if ctx.GlobalIsSet(utils.MinerThreadsFlag.Name) {
 			threads = ctx.GlobalInt(utils.MinerThreadsFlag.Name)
 		}
-		if err := ethereum.StartMining(threads); err != nil {
-			utils.Fatalf("Failed to start mining: %v", err)
+		if ctx.GlobalBool(utils.MiningEnabledFlag.Name) || ctx.GlobalBool(utils.DeveloperFlag.Name) {
+			if err := ethereum.StartMining(threads); err != nil {
+				utils.Fatalf("Failed to start mining: %v", err)
+			}
 		}
 	}
 }
