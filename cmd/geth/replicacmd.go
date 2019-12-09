@@ -39,7 +39,7 @@ import (
 	"github.com/ethereum/go-ethereum/eth/gasprice"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/eth/downloader"
-	"github.com/ethereum/go-ethereum/dashboard"
+	// "github.com/ethereum/go-ethereum/dashboard"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/p2p/nat"
@@ -91,6 +91,7 @@ system and acts as an RPC node based on the replicated data.
 			utils.OverlayFlag,
 			utils.AncientFlag,
 			utils.OverrideIstanbulFlag,
+			utils.OverrideMuirGlacierFlag,
 			utils.CacheFlag,
 			utils.CacheTrieFlag,
 			utils.CacheGCFlag,
@@ -169,7 +170,7 @@ func makeReplicaNode(ctx *cli.Context) (*node.Node, gethConfig) {
 		Eth:       ethConfig,
 		Shh:       whisper.DefaultConfig,
 		Node:      replicaNodeConfig(),
-		Dashboard: dashboard.DefaultConfig,
+		// Dashboard: dashboard.DefaultConfig,
 	}
 	if ctx.GlobalIsSet(utils.OverrideIstanbulFlag.Name) {
 		cfg.Eth.OverrideIstanbul = new(big.Int).SetUint64(ctx.GlobalUint64(utils.OverrideIstanbulFlag.Name))
@@ -194,7 +195,7 @@ func makeReplicaNode(ctx *cli.Context) (*node.Node, gethConfig) {
 	}
 
 	utils.SetShhConfig(ctx, stack, &cfg.Shh)
-	utils.SetDashboardConfig(ctx, &cfg.Dashboard)
+	// utils.SetDashboardConfig(ctx, &cfg.Dashboard)
 	stack.Register(func (sctx *node.ServiceContext) (node.Service, error) {
 		log.Info("Opening leveldb")
 		var chainKv ethdb.KeyValueStore

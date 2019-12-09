@@ -191,7 +191,7 @@ func NewReplica(db ethdb.Database, config *eth.Config, ctx *node.ServiceContext,
     db.Close()
     os.Exit(0)
   }
-  chainConfig, _, _ := core.SetupGenesisBlockWithOverride(db, config.Genesis, config.OverrideIstanbul)
+  chainConfig, _, _ := core.SetupGenesisBlockWithOverride(db, config.Genesis, config.OverrideIstanbul, config.OverrideMuirGlacier)
   engine := eth.CreateConsensusEngine(ctx, chainConfig, &config.Ethash, []string{}, true, db)
   hc, err := core.NewHeaderChain(db, chainConfig, engine, func() bool { return false })
   if err != nil {
