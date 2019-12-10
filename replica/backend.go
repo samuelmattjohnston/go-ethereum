@@ -326,7 +326,7 @@ func (backend *ReplicaBackend) Stats() (pending int, queued int) {
 
 func (backend *ReplicaBackend) RPCGasCap() *big.Int {
   // TODO: Make configurable
-  return big.NewInt(128000000)
+  return big.NewInt(int64(math.MaxUint64 / 2))
 }
 
 	// Return empty maps
