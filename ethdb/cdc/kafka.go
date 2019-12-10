@@ -5,6 +5,7 @@ import (
   "github.com/ethereum/go-ethereum/log"
   "net/url"
   "strings"
+  "strconv"
   "time"
 )
 
@@ -13,9 +14,27 @@ func ParseKafkaURL(brokerURL string) ([]string, *sarama.Config) {
   parsedURL, _ := url.Parse("kafka://" + brokerURL)
   config := sarama.NewConfig()
   config.Version = sarama.V2_1_0_0
+
   if parsedURL.Query().Get("tls") == "1" {
     config.Net.TLS.Enable = true
   }
+  if val := parsedURL.Query().Get("fetch.default"); val != "" {
+    fetchDefault, err := strconv.Atoi(val)
+    if err != nil {
+      log.Warn("fetch.default set, but not number", "fetch.default", val)
+    } else {
+      config.Consumer.Fetch.Default = int32(fetchDefault)
+    }
+  }
+  if val := parsedURL.Query().Get("max.waittime"); val != "" {
+    maxWaittime, err := strconv.Atoi(val)
+    if err != nil {
+      log.Warn("max.waittime set, but not number", "max.waittime", val)
+    } else {
+      config.Consumer.MaxWaitTime = time.Duration(maxWaittime) * time.Millisecond
+    }
+  }
+
   if parsedURL.User != nil {
     config.Net.SASL.Enable = true
     config.Net.SASL.User = parsedURL.User.Username()
