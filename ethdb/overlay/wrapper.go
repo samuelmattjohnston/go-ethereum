@@ -2,8 +2,10 @@ package overlay
 
 import (
   "github.com/ethereum/go-ethereum/ethdb"
-  // "github.com/ethereum/go-ethereum/log"
+  "github.com/ethereum/go-ethereum/log"
+  "time"
   "strings"
+  "sync/atomic"
   // "fmt"
 )
 
@@ -17,14 +19,35 @@ type OverlayWrapperDB struct {
   overlay ethdb.KeyValueStore
   cache ethdb.KeyValueStore
   underlay ethdb.KeyValueStore
+  overlayHits  uint64
+  cacheHits    uint64
+  underlayHits uint64
 }
 
 func NewOverlayWrapperDB(overlay, underlay ethdb.KeyValueStore) ethdb.KeyValueStore {
-  return &OverlayWrapperDB{overlay, nil, underlay}
+  kv := &OverlayWrapperDB{overlay, nil, underlay, 0, 0, 0}
+  go func() {
+    for _ = range time.NewTicker(60 * time.Second).C {
+      log.Info("Overlay statistics", "overlay", atomic.LoadUint64(&kv.overlayHits), "underlay", atomic.LoadUint64(&kv.underlayHits))
+      atomic.StoreUint64(&kv.cacheHits, 0)
+      atomic.StoreUint64(&kv.underlayHits, 0)
+      atomic.StoreUint64(&kv.overlayHits, 0)
+    }
+  }()
+  return kv
 }
 
 func NewCachedOverlayWrapperDB(overlay, cache, underlay ethdb.KeyValueStore) ethdb.KeyValueStore {
-  return &OverlayWrapperDB{overlay, cache, underlay}
+  kv := &OverlayWrapperDB{overlay, cache, underlay, 0, 0, 0}
+  go func() {
+    for _ = range time.NewTicker(60 * time.Second).C {
+      log.Info("Overlay statistics", "overlay", atomic.LoadUint64(&kv.overlayHits), "underlay", atomic.LoadUint64(&kv.underlayHits), "cache", atomic.LoadUint64(&kv.cacheHits))
+      atomic.StoreUint64(&kv.cacheHits, 0)
+      atomic.StoreUint64(&kv.underlayHits, 0)
+      atomic.StoreUint64(&kv.overlayHits, 0)
+    }
+  }()
+  return kv
 }
 
 func deleted(key []byte) ([]byte) {
@@ -50,12 +73,14 @@ func (wrapper *OverlayWrapperDB) Get(key []byte) ([]byte, error) {
   if err != nil && strings.HasSuffix(err.Error(), "not found") {
     isDeleted, _ := wrapper.overlay.Has(deleted(key))
     if isDeleted {
+      atomic.AddUint64(&wrapper.overlayHits, 1)
       return val, err
     }
     // Not in overlay, not deleted in overlay
     if wrapper.cache != nil {
       val, err := wrapper.cache.Get(key)
       if err == nil || !strings.HasSuffix(err.Error(), "not found") {
+        atomic.AddUint64(&wrapper.cacheHits, 1)
         return val, err
       }
     }
@@ -63,8 +88,10 @@ func (wrapper *OverlayWrapperDB) Get(key []byte) ([]byte, error) {
     if err == nil && wrapper.cache != nil {
       wrapper.cache.Put(key, val)
     }
+    atomic.AddUint64(&wrapper.underlayHits, 1)
     return val, err
   }
+  atomic.AddUint64(&wrapper.overlayHits, 1)
   return val, err
 }
 
@@ -73,17 +100,21 @@ func (wrapper *OverlayWrapperDB) Has(key []byte) (bool, error) {
   if !val {
     isDeleted, _ := wrapper.overlay.Has(deleted(key))
     if isDeleted {
+      atomic.AddUint64(&wrapper.overlayHits, 1)
       return false, nil
     }
     // Not in overlay, not deleted in overlay
     if wrapper.cache != nil {
       val, err := wrapper.cache.Has(key)
       if val {
+        atomic.AddUint64(&wrapper.cacheHits, 1)
         return val, err
       }
     }
+    atomic.AddUint64(&wrapper.underlayHits, 1)
     return wrapper.underlay.Has(key)
   }
+  atomic.AddUint64(&wrapper.overlayHits, 1)
   return val, err
 }
 
