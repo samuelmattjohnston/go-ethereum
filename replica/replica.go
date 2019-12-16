@@ -98,26 +98,46 @@ func (r *Replica) GetBackend() *ReplicaBackend {
 }
 
 func (r *Replica) APIs() []rpc.API {
-  return append(ethapi.GetAPIs(r.GetBackend()),
-    rpc.API{
+  apiBackend := r.GetBackend()
+  nonceLock := new(ethapi.AddrLocker)
+	return []rpc.API{
+		{
+			Namespace: "eth",
+			Version:   "1.0",
+			Service:   ethapi.NewPublicEthereumAPI(apiBackend),
+			Public:    true,
+		}, {
+			Namespace: "eth",
+			Version:   "1.0",
+			Service:   ethapi.NewPublicBlockChainAPI(apiBackend),
+			Public:    true,
+		}, {
+			Namespace: "eth",
+			Version:   "1.0",
+			Service:   ethapi.NewPublicTransactionPoolAPI(apiBackend, nonceLock),
+			Public:    true,
+		}, {
+			Namespace: "debug",
+			Version:   "1.0",
+			Service:   ethapi.NewPublicDebugAPI(apiBackend),
+			Public:    true,
+		}, {
       Namespace: "eth",
       Version:   "1.0",
       Service:   filters.NewPublicFilterAPI(r.GetBackend(), false),
       Public:    true,
-    },
-    rpc.API{
+    }, {
       Namespace: "net",
       Version:   "1.0",
       Service:   NewReplicaNetAPI(r.GetBackend()),
       Public:    true,
-    },
-    rpc.API{
+    }, {
       Namespace: "eth",
       Version:   "1.0",
       Service:   NewPublicEthereumAPI(r.GetBackend()),
       Public:    true,
     },
-  )
+	}
 }
 func (r *Replica) Start(server *p2p.Server) error {
   go func() {
