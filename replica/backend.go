@@ -25,6 +25,7 @@ import (
   "github.com/ethereum/go-ethereum/log"
   "github.com/ethereum/go-ethereum/trie"
   "runtime"
+  "strings"
   "time"
 )
 
@@ -476,7 +477,7 @@ func (backend *ReplicaBackend) consumeTransactions(transactionConsumer Transacti
   if transactionConsumer != nil {
     go func() {
       for tx := range transactionConsumer.Messages() {
-        if err := backend.txPool.AddRemote(tx); err != nil {
+        if err := backend.txPool.AddRemote(tx); err != nil && strings.HasPrefix(err.Error(), "known transaction") {
           log.Warn("Error adding tx to pool", "tx", tx.Hash(), "error", err)
         }
       }
