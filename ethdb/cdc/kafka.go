@@ -206,11 +206,12 @@ func NewKafkaLogConsumer(consumer sarama.Consumer, topic string, offset int64, c
   if err != nil {
     return nil, err
   }
-  var highOffset int64
+  var highOffset, lowOffset int64
   if client != nil {
     highOffset, _ = client.GetOffset(topic, 0, sarama.OffsetNewest)
+    lowOffset, _ = client.GetOffset(topic, 0, sarama.OffsetOldest)
   }
-  return &KafkaLogConsumer{partitionConsumer, topic, nil, make(chan struct{}), (highOffset > 0)}, nil
+  return &KafkaLogConsumer{partitionConsumer, topic, nil, make(chan struct{}), (highOffset > lowOffset)}, nil
 }
 
 func NewKafkaLogConsumerFromURL(brokerURL, topic string, offset int64) (LogConsumer, error) {
