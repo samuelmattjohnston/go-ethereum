@@ -36,6 +36,7 @@ type Replica struct {
   chainConfig *params.ChainConfig
   bc *core.BlockChain
   transactionProducer TransactionProducer
+  transactionConsumer TransactionConsumer
   shutdownChan chan bool
   topic string
   maxOffsetAge int64
@@ -69,6 +70,10 @@ func (r *Replica) GetBackend() *ReplicaBackend {
       blockHeads: r.headChan,
       evmSemaphore: evmSemaphore,
     }
+    if err := r.backend.consumeTransactions(r.transactionConsumer); err != nil {
+      log.Warn("Error consuming transactions")
+    }
+
     go r.backend.handleBlockUpdates()
     if r.warmAddressFile != "" {
       jsonFile, err := os.Open(r.warmAddressFile)
@@ -172,15 +177,19 @@ func (r *Replica) Start(server *p2p.Server) error {
       log.Info("Replica Sync", "num", currentBlock.Number(), "hash", currentBlock.Hash(), "blockAge", common.PrettyAge(time.Unix(int64(currentBlock.Time()), 0)), "offset", offset, "offsetAge", common.PrettyAge(time.Unix(offsetTimestamp, 0)))
     }
   }()
-  return r.graphql.Start(server)
+  if r.graphql != nil {
+    return r.graphql.Start(server)
+  }
+  return nil
 }
 func (r *Replica) Stop() error {
   r.db.Close()
   r.graphql.Stop()
+  r.transactionConsumer.Close()
   return nil
 }
 
-func NewReplica(db ethdb.Database, config *eth.Config, ctx *node.ServiceContext, transactionProducer TransactionProducer, consumer cdc.LogConsumer, syncShutdown bool, startupAge, maxOffsetAge, maxBlockAge int64, graphqlEnabled bool, graphqlEndpoint string, graphqlCors []string, graphqlVirtualHosts []string, timeout rpc.HTTPTimeouts, evmConcurrency int, warmAddressFile string) (*Replica, error) {
+func NewReplica(db ethdb.Database, config *eth.Config, ctx *node.ServiceContext, transactionProducer TransactionProducer, consumer cdc.LogConsumer, transactionConsumer TransactionConsumer, syncShutdown bool, startupAge, maxOffsetAge, maxBlockAge int64, graphqlEnabled bool, graphqlEndpoint string, graphqlCors []string, graphqlVirtualHosts []string, timeout rpc.HTTPTimeouts, evmConcurrency int, warmAddressFile string) (*Replica, error) {
   var headChan chan []byte
   go func() {
     for operation := range consumer.Messages() {
@@ -202,7 +211,7 @@ func NewReplica(db ethdb.Database, config *eth.Config, ctx *node.ServiceContext,
     db.Close()
     os.Exit(0)
   }
-  chainConfig, _, _ := core.SetupGenesisBlockWithOverride(db, config.Genesis, config.OverrideIstanbul)
+  chainConfig, _, _ := core.SetupGenesisBlockWithOverride(db, config.Genesis, config.OverrideIstanbul, config.OverrideMuirGlacier)
   engine := eth.CreateConsensusEngine(ctx, chainConfig, &config.Ethash, []string{}, true, db)
   hc, err := core.NewHeaderChain(db, chainConfig, engine, func() bool { return false })
   if err != nil {
@@ -220,7 +229,7 @@ func NewReplica(db ethdb.Database, config *eth.Config, ctx *node.ServiceContext,
     log.Info("Block time is current. Starting replica.")
   }
   headChan = make(chan []byte, 10)
-  replica := &Replica{db, hc, chainConfig, bc, transactionProducer, make(chan bool), consumer.TopicName(), maxOffsetAge, maxBlockAge, headChan, nil, nil, evmConcurrency, warmAddressFile}
+  replica := &Replica{db, hc, chainConfig, bc, transactionProducer, transactionConsumer, make(chan bool), consumer.TopicName(), maxOffsetAge, maxBlockAge, headChan, nil, nil, evmConcurrency, warmAddressFile}
   // endpoint string, cors, vhosts []string, timeouts rpc.HTTPTimeouts
   if graphqlEnabled {
     replica.graphql, err = graphql.New(replica.GetBackend(), graphqlEndpoint, graphqlCors, graphqlVirtualHosts, timeout)
@@ -228,7 +237,7 @@ func NewReplica(db ethdb.Database, config *eth.Config, ctx *node.ServiceContext,
   return replica, err
 }
 
-func NewKafkaReplica(db ethdb.Database, config *eth.Config, ctx *node.ServiceContext, kafkaSourceBroker, kafkaTopic, transactionTopic string, syncShutdown bool, startupAge, offsetAge, blockAge int64, graphqlEnabled bool, graphqlEndpoint string, graphqlCors []string, graphqlVirtualHosts []string, timeout rpc.HTTPTimeouts, evmConcurrency int, warmAddressFile string) (*Replica, error) {
+func NewKafkaReplica(db ethdb.Database, config *eth.Config, ctx *node.ServiceContext, kafkaSourceBroker, kafkaTopic, transactionTopic, txPoolTopic string, syncShutdown bool, startupAge, offsetAge, blockAge int64, graphqlEnabled bool, graphqlEndpoint string, graphqlCors []string, graphqlVirtualHosts []string, timeout rpc.HTTPTimeouts, evmConcurrency int, warmAddressFile string) (*Replica, error) {
   topicParts := strings.Split(kafkaTopic, ":")
   kafkaTopic = topicParts[0]
   var offset int64
@@ -258,13 +267,20 @@ func NewKafkaReplica(db ethdb.Database, config *eth.Config, ctx *node.ServiceCon
     offset,
   )
   if err != nil { return nil, err }
+  transactionConsumer, err := NewKafkaTransactionConsumerFromURLs(kafkaSourceBroker, txPoolTopic)
+  if err != nil { return nil, err }
   log.Info("Populating replica from topic", "topic", kafkaTopic, "offset", offset)
-  transactionProducer, err := NewKafkaTransactionProducerFromURLs(
-    kafkaSourceBroker,
-    transactionTopic,
-  )
-  if err != nil {
-    return nil, err
+  var transactionProducer TransactionProducer
+  if transactionTopic != "" {
+    transactionProducer, err = NewKafkaTransactionProducerFromURLs(
+      kafkaSourceBroker,
+      transactionTopic,
+    )
+    if err != nil {
+      return nil, err
+    }
+  } else {
+    log.Warn("No transaction topic specified. Replica will not have mempool data.")
   }
-  return NewReplica(db, config, ctx, transactionProducer, consumer, syncShutdown, startupAge, offsetAge, blockAge, graphqlEnabled, graphqlEndpoint, graphqlCors, graphqlVirtualHosts, timeout, evmConcurrency, warmAddressFile)
+  return NewReplica(db, config, ctx, transactionProducer, consumer, transactionConsumer, syncShutdown, startupAge, offsetAge, blockAge, graphqlEnabled, graphqlEndpoint, graphqlCors, graphqlVirtualHosts, timeout, evmConcurrency, warmAddressFile)
 }

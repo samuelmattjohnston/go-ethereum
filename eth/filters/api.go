@@ -338,6 +338,15 @@ func (api *PublicFilterAPI) GetLogs(ctx context.Context, crit FilterCriteria) ([
 		if crit.ToBlock != nil {
 			end = crit.ToBlock.Int64()
 		}
+		if begin == -1 || end == -1 {
+			header, err := api.backend.HeaderByNumber(ctx, rpc.LatestBlockNumber)
+			if err != nil { return nil, err }
+			if begin == -1 { begin = header.Number.Int64() }
+			if end == -1 { end = header.Number.Int64() }
+		}
+		if end - begin > 10000 {
+			return nil, fmt.Errorf("getLogs block count exceeds limit")
+		}
 		// Construct the range filter
 		filter = NewRangeFilter(api.backend, begin, end, crit.Addresses, crit.Topics)
 	}

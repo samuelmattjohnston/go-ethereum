@@ -25,6 +25,7 @@ import (
   "github.com/ethereum/go-ethereum/log"
   "github.com/ethereum/go-ethereum/trie"
   "runtime"
+  "strings"
   "time"
 )
 
@@ -35,6 +36,7 @@ type ReplicaBackend struct {
   chainConfig *params.ChainConfig
   bc *core.BlockChain
   transactionProducer TransactionProducer
+  transactionConsumer TransactionConsumer
   eventMux *event.TypeMux
   dl *downloader.Downloader
   bloomRequests chan chan *bloombits.Retrieval
@@ -47,8 +49,8 @@ type ReplicaBackend struct {
   chainFeed event.Feed
   chainHeadFeed event.Feed
   chainSideFeed event.Feed
-  newTxsFeed    event.Feed
   evmSemaphore chan struct{}
+  txPool *core.TxPool
 }
 
 	// General Ethereum API
@@ -65,6 +67,7 @@ func (backend *ReplicaBackend) ProtocolVersion() int {
   return int(backend.chainConfig.ChainID.Int64())
 }
 func (backend *ReplicaBackend) SuggestPrice(ctx context.Context) (*big.Int, error) {
+  if ctx != nil { if err := ctx.Err(); err != nil { return nil, err } }
   if backend.gpo == nil {
     backend.gpo = gasprice.NewOracle(backend, gasprice.Config{
       Blocks:     20,
@@ -94,6 +97,7 @@ func (backend *ReplicaBackend) SetHead(number uint64) {
 
 }
 func (backend *ReplicaBackend) HeaderByNumber(ctx context.Context, blockNr rpc.BlockNumber) (*types.Header, error) {
+  if ctx != nil { if err := ctx.Err(); err != nil { return nil, err } }
   if blockNr == rpc.LatestBlockNumber {
     latestHash := rawdb.ReadHeadHeaderHash(backend.db)
 		return backend.hc.GetHeaderByHash(latestHash), nil
@@ -102,10 +106,12 @@ func (backend *ReplicaBackend) HeaderByNumber(ctx context.Context, blockNr rpc.B
 }
 
 func (backend *ReplicaBackend) HeaderByHash(ctx context.Context, blockHash common.Hash) (*types.Header, error) {
+  if ctx != nil { if err := ctx.Err(); err != nil { return nil, err } }
   return backend.hc.GetHeaderByHash(blockHash), nil
 }
 
 func (backend *ReplicaBackend) BlockByNumber(ctx context.Context, blockNr rpc.BlockNumber) (*types.Block, error) {
+  if ctx != nil { if err := ctx.Err(); err != nil { return nil, err } }
   if blockNr == rpc.LatestBlockNumber || blockNr == rpc.PendingBlockNumber {
     latestHash := rawdb.ReadHeadBlockHash(backend.db)
 		return backend.bc.GetBlockByHash(latestHash), nil
@@ -113,26 +119,33 @@ func (backend *ReplicaBackend) BlockByNumber(ctx context.Context, blockNr rpc.Bl
 	return backend.bc.GetBlockByNumber(uint64(blockNr)), nil
 }
 func (backend *ReplicaBackend) BlockByHash(ctx context.Context, hash common.Hash) (*types.Block, error) {
+  if ctx != nil { if err := ctx.Err(); err != nil { return nil, err } }
   return backend.bc.GetBlockByHash(hash), nil
 }
 
 	// For StateAndHeaderByNumber, we'll need to construct a core.state object from
 	// the state root for the specified block and the chaindb.
 func (backend *ReplicaBackend) StateAndHeaderByNumber(ctx context.Context, blockNr rpc.BlockNumber) (*state.StateDB, *types.Header, error) {
+  if ctx != nil { if err := ctx.Err(); err != nil { return nil, nil, err } }
   block, err := backend.BlockByNumber(ctx, blockNr)
   if block == nil || err != nil {
-    return nil, nil, err
+    return nil, nil, fmt.Errorf("stateAndHeaderByNumber: blockByNumber: %v", err)
   }
   stateDB, err := backend.bc.StateAt(block.Root())
+  if err != nil {
+    err = fmt.Errorf("statendHeaderByNumber: stateAt: %v", err)
+  }
   return stateDB, block.Header(), err
 }
 
 	// This will need to rely on core.database_util.GetBlock instead of the core.blockchain version
 func (backend *ReplicaBackend) GetBlock(ctx context.Context, blockHash common.Hash) (*types.Block, error) {
+  if ctx != nil { if err := ctx.Err(); err != nil { return nil, err } }
   return backend.bc.GetBlockByHash(blockHash), nil
 }
 	// Proxy rawdb.ReadBlockReceipts
 func (backend *ReplicaBackend) GetReceipts(ctx context.Context, blockHash common.Hash) (types.Receipts, error) {
+  if ctx != nil { if err := ctx.Err(); err != nil { return nil, err } }
   return backend.bc.GetReceiptsByHash(blockHash), nil
 }
 	// This can probably lean on core.HeaderChain
@@ -161,6 +174,7 @@ func (backend *ReplicaBackend) GetEVM(ctx context.Context, msg core.Message, sta
 }
 
 func (backend *ReplicaBackend) GetLogs(ctx context.Context, blockHash common.Hash) ([][]*types.Log, error) {
+  if ctx != nil { if err := ctx.Err(); err != nil { return nil, err } }
   receipts := backend.bc.GetReceiptsByHash(blockHash)
   if receipts == nil {
     return nil, nil
@@ -194,6 +208,7 @@ func (backend *ReplicaBackend) SubscribeChainSideEvent(ch chan<- core.ChainSideE
 	// TxPool API
 
 func (backend *ReplicaBackend) SendTx(ctx context.Context, signedTx *types.Transaction) error {
+  if ctx != nil { if err := ctx.Err(); err != nil { return err } }
   if backend.transactionProducer == nil {
     return errors.New("This api is not configured for accepting transactions")
   }
@@ -265,6 +280,11 @@ func (backend *ReplicaBackend) ServiceFilter(ctx context.Context, session *bloom
 
   				case request := <-backend.bloomRequests:
   					task := <-request
+            if err := task.Context.Err(); err != nil {
+              task.Error = err
+              request <- task
+              continue
+            }
   					task.Bitsets = make([][]byte, len(task.Sections))
   					for i, section := range task.Sections {
   						head := rawdb.ReadCanonicalHash(backend.db, (section+1)*sectionSize-1)
@@ -291,19 +311,28 @@ func (backend *ReplicaBackend) ServiceFilter(ctx context.Context, session *bloom
 
 	// Read replicas won't have the p2p functionality, so these will be noops
 
-	// Return an empty transactions list
+	// GetPoolTransactions returns all pending tranactions in the pool
 func (backend *ReplicaBackend) GetPoolTransactions() (types.Transactions, error) {
-  return nil, nil
+  pending, err := backend.txPool.Pending()
+  if err != nil {
+    return nil, err
+  }
+  var txs types.Transactions
+  for _, batch := range pending {
+    txs = append(txs, batch...)
+  }
+  return txs, nil
 }
 
-	// Return nil
+	// GetPoolTransaction returns the specified transaction if it's in the transaction pool
 func (backend *ReplicaBackend) GetPoolTransaction(txHash common.Hash) *types.Transaction {
-  return nil
+  return backend.txPool.Get(txHash)
 }
 
 	// Generate core.state.managed_state object from current state, and get nonce from that
 	// It won't account for have pending transactions
 func (backend *ReplicaBackend) GetPoolNonce(ctx context.Context, addr common.Address) (uint64, error) {
+  if ctx != nil { if err := ctx.Err(); err != nil { return 0, err } }
   state, _, err := backend.StateAndHeaderByNumber(ctx, rpc.LatestBlockNumber)
   if err != nil {return 0, err}
   nonce := state.GetNonce(addr)
@@ -322,12 +351,12 @@ func (backend *ReplicaBackend) RPCGasCap() *big.Int {
 
 	// Return empty maps
 func (backend *ReplicaBackend) TxPoolContent() (map[common.Address]types.Transactions, map[common.Address]types.Transactions) {
-  return make(map[common.Address]types.Transactions), make(map[common.Address]types.Transactions)
+  return backend.txPool.Content()
 }
 
 	// Not sure how to stub out subscriptions
 func (backend *ReplicaBackend) SubscribeNewTxsEvent(ch chan<- core.NewTxsEvent) event.Subscription {
-  return backend.newTxsFeed.Subscribe(ch)
+  return backend.txPool.SubscribeNewTxsEvent(ch)
 }
 
 func (backend *ReplicaBackend) ChainConfig() *params.ChainConfig {
@@ -346,6 +375,7 @@ func (backend *ReplicaBackend) ExtRPCEnabled() bool {
   return true
 }
 func (backend *ReplicaBackend) GetTransaction(ctx context.Context, txHash common.Hash) (*types.Transaction, common.Hash, uint64, uint64, error) {
+  if ctx != nil { if err := ctx.Err(); err != nil { return nil, common.Hash{}, 0, 0, err } }
 	tx, blockHash, blockNumber, index := rawdb.ReadTransaction(backend.db, txHash)
 	return tx, blockHash, blockNumber, index, nil
 }
@@ -458,6 +488,24 @@ func (backend *ReplicaBackend) handleBlockUpdates() {
   }
 }
 
+func (backend *ReplicaBackend) consumeTransactions(transactionConsumer TransactionConsumer) error {
+  pool, err := core.NewReplicaTxPool(core.DefaultTxPoolConfig, backend.chainConfig, backend.bc, backend)
+  backend.txPool = pool
+  if err != nil {
+    return err
+  }
+  if transactionConsumer != nil {
+    go func() {
+      for tx := range transactionConsumer.Messages() {
+        if err := backend.txPool.AddRemote(tx); err != nil && !strings.HasPrefix(err.Error(), "known transaction") {
+          log.Warn("Error adding tx to pool", "tx", tx.Hash(), "error", err)
+        }
+      }
+      }()
+  }
+  return nil
+}
+
 func (backend *ReplicaBackend) findCommonAncestor(newHead, oldHead *types.Block) (*types.Block, types.Blocks, types.Blocks, error) {
   reverted := types.Blocks{}
   newBlocks := types.Blocks{newHead}
@@ -485,6 +533,7 @@ func (backend *ReplicaBackend) findCommonAncestor(newHead, oldHead *types.Block)
 }
 
 func (backend *ReplicaBackend) HeaderByNumberOrHash(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash) (*types.Header, error) {
+  if ctx != nil { if err := ctx.Err(); err != nil { return nil, err } }
   if num, ok := blockNrOrHash.Number(); ok {
     return backend.HeaderByNumber(ctx, num)
   }
@@ -494,6 +543,7 @@ func (backend *ReplicaBackend) HeaderByNumberOrHash(ctx context.Context, blockNr
   return nil, fmt.Errorf("Invalid block number or hash")
 }
 func (backend *ReplicaBackend) BlockByNumberOrHash(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash) (*types.Block, error) {
+  if ctx != nil { if err := ctx.Err(); err != nil { return nil, err } }
   if num, ok := blockNrOrHash.Number(); ok {
     return backend.BlockByNumber(ctx, num)
   }
@@ -503,6 +553,7 @@ func (backend *ReplicaBackend) BlockByNumberOrHash(ctx context.Context, blockNrO
   return nil, fmt.Errorf("Invalid block number or hash")
 }
 func (backend *ReplicaBackend) StateAndHeaderByNumberOrHash(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash) (*state.StateDB, *types.Header, error) {
+  if ctx != nil { if err := ctx.Err(); err != nil { return nil, nil, err } }
   if num, ok := blockNrOrHash.Number(); ok {
     return backend.StateAndHeaderByNumber(ctx, num)
   }

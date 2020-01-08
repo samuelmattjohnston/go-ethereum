@@ -42,6 +42,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/node"
+	replicaModule "github.com/ethereum/go-ethereum/replica"
 	cli "gopkg.in/urfave/cli.v1"
 )
 
@@ -71,10 +72,7 @@ var (
 		utils.NoUSBFlag,
 		utils.SmartCardDaemonPathFlag,
 		utils.OverrideIstanbulFlag,
-		utils.DashboardEnabledFlag,
-		utils.DashboardAddrFlag,
-		utils.DashboardPortFlag,
-		utils.DashboardRefreshFlag,
+		utils.OverrideMuirGlacierFlag,
 		utils.EthashCacheDirFlag,
 		utils.EthashCachesInMemoryFlag,
 		utils.EthashCachesOnDiskFlag,
@@ -152,6 +150,7 @@ var (
 		configFileFlag,
 		utils.KafkaLogBrokerFlag,
 		utils.KafkaLogTopicFlag,
+		utils.KafkaTransactionPoolTopicFlag,
 		utils.KafkaTransactionTopicFlag,
 		utils.KafkaTransactionConsumerGroupFlag,
 		utils.ReplicaSyncShutdownFlag,
@@ -254,16 +253,8 @@ func init() {
 	app.Flags = append(app.Flags, metricsFlags...)
 
 	app.Before = func(ctx *cli.Context) error {
-		logdir := ""
-		if ctx.GlobalBool(utils.DashboardEnabledFlag.Name) {
-			logdir = (&node.Config{DataDir: utils.MakeDataDir(ctx)}).ResolvePath("logs")
-		}
-		if err := debug.Setup(ctx, logdir); err != nil {
-			return err
-		}
-		return nil
+		return debug.Setup(ctx, "")
 	}
-
 	app.After = func(ctx *cli.Context) error {
 		debug.Exit()
 		console.Stdin.Close() // Resets terminal mode.
@@ -437,7 +428,7 @@ func startNode(ctx *cli.Context, stack *node.Node) {
 	}
 
 	// Start auxiliary services if enabled
-	if ctx.GlobalBool(utils.MiningEnabledFlag.Name) || ctx.GlobalBool(utils.DeveloperFlag.Name) {
+	if ctx.GlobalBool(utils.MiningEnabledFlag.Name) || ctx.GlobalBool(utils.DeveloperFlag.Name) || ctx.GlobalBool(utils.DeveloperFlag.Name) || ctx.GlobalString(utils.KafkaTransactionPoolTopicFlag.Name) != "" {
 		// Mining only makes sense if a full Ethereum node is running
 		if ctx.GlobalString(utils.SyncModeFlag.Name) == "light" {
 			utils.Fatalf("Light clients do not support mining")
@@ -453,12 +444,29 @@ func startNode(ctx *cli.Context, stack *node.Node) {
 		}
 		ethereum.TxPool().SetGasPrice(gasprice)
 
+		if brokerURL := ctx.GlobalString(utils.KafkaLogBrokerFlag.Name); brokerURL != "" {
+			if poolTopic := ctx.GlobalString(utils.KafkaTransactionPoolTopicFlag.Name); poolTopic != "" {
+				producer, err := replicaModule.NewKafkaTransactionProducerFromURLs(brokerURL, poolTopic)
+				if err != nil {
+					utils.Fatalf("Failed to create transaction producer for %v - %v", brokerURL, poolTopic)
+				}
+				log.Info("Starting Kafka Transaction Relay", "broker", brokerURL, "topic", poolTopic)
+				producer.RelayTransactions(ethereum.TxPool())
+			} else {
+				log.Info("Pool topic missing")
+			}
+		} else {
+			log.Info("Broker url missing")
+		}
+
 		threads := ctx.GlobalInt(utils.MinerLegacyThreadsFlag.Name)
 		if ctx.GlobalIsSet(utils.MinerThreadsFlag.Name) {
 			threads = ctx.GlobalInt(utils.MinerThreadsFlag.Name)
 		}
-		if err := ethereum.StartMining(threads); err != nil {
-			utils.Fatalf("Failed to start mining: %v", err)
+		if ctx.GlobalBool(utils.MiningEnabledFlag.Name) || ctx.GlobalBool(utils.DeveloperFlag.Name) {
+			if err := ethereum.StartMining(threads); err != nil {
+				utils.Fatalf("Failed to start mining: %v", err)
+			}
 		}
 	}
 }

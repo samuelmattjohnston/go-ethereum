@@ -5,6 +5,7 @@ import (
   "github.com/ethereum/go-ethereum/log"
   "net/url"
   "strings"
+  "strconv"
   "time"
 )
 
@@ -13,9 +14,27 @@ func ParseKafkaURL(brokerURL string) ([]string, *sarama.Config) {
   parsedURL, _ := url.Parse("kafka://" + brokerURL)
   config := sarama.NewConfig()
   config.Version = sarama.V2_1_0_0
+
   if parsedURL.Query().Get("tls") == "1" {
     config.Net.TLS.Enable = true
   }
+  if val := parsedURL.Query().Get("fetch.default"); val != "" {
+    fetchDefault, err := strconv.Atoi(val)
+    if err != nil {
+      log.Warn("fetch.default set, but not number", "fetch.default", val)
+    } else {
+      config.Consumer.Fetch.Default = int32(fetchDefault)
+    }
+  }
+  if val := parsedURL.Query().Get("max.waittime"); val != "" {
+    maxWaittime, err := strconv.Atoi(val)
+    if err != nil {
+      log.Warn("max.waittime set, but not number", "max.waittime", val)
+    } else {
+      config.Consumer.MaxWaitTime = time.Duration(maxWaittime) * time.Millisecond
+    }
+  }
+
   if parsedURL.User != nil {
     config.Net.SASL.Enable = true
     config.Net.SASL.User = parsedURL.User.Username()
@@ -60,7 +79,10 @@ func (producer *KafkaLogProducer) Emit(data []byte) error {
   return nil
 }
 
-func CreateTopicIfDoesNotExist(brokerAddr, topic string) error {
+func CreateTopicIfDoesNotExist(brokerAddr, topic string, numPartitions int32, configEntries map[string]*string) error {
+  if configEntries == nil {
+    configEntries = make(map[string]*string)
+  }
   brokerList, config := ParseKafkaURL(brokerAddr)
   client, err := sarama.NewClient(brokerList, config)
   if err != nil {
@@ -83,7 +105,7 @@ func CreateTopicIfDoesNotExist(brokerAddr, topic string) error {
   if len(response.Topics) == 0 || len(response.Topics[0].Partitions) == 0 {
     log.Info("Attempting to create topic")
     topicDetails := make(map[string]*sarama.TopicDetail)
-    configEntries := make(map[string]*string)
+
     compressionType := "snappy"
     configEntries["compression.type"] = &compressionType
     replicationFactor := int16(len(client.Brokers()))
@@ -93,7 +115,7 @@ func CreateTopicIfDoesNotExist(brokerAddr, topic string) error {
     }
     topicDetails[topic] = &sarama.TopicDetail{
       ConfigEntries: configEntries,
-      NumPartitions: 1,
+      NumPartitions: numPartitions,
       ReplicationFactor: replicationFactor,
     }
     r, err := broker.CreateTopics(&sarama.CreateTopicsRequest{
@@ -116,7 +138,7 @@ func CreateTopicIfDoesNotExist(brokerAddr, topic string) error {
 
 func NewKafkaLogProducerFromURL(brokerURL, topic string) (LogProducer, error) {
   brokers, config := ParseKafkaURL(brokerURL)
-  if err := CreateTopicIfDoesNotExist(brokerURL, topic); err != nil {
+  if err := CreateTopicIfDoesNotExist(brokerURL, topic, 1, nil); err != nil {
     return nil, err
   }
   producer, err := sarama.NewAsyncProducer(brokers, config)
@@ -184,16 +206,17 @@ func NewKafkaLogConsumer(consumer sarama.Consumer, topic string, offset int64, c
   if err != nil {
     return nil, err
   }
-  var highOffset int64
+  var highOffset, lowOffset int64
   if client != nil {
     highOffset, _ = client.GetOffset(topic, 0, sarama.OffsetNewest)
+    lowOffset, _ = client.GetOffset(topic, 0, sarama.OffsetOldest)
   }
-  return &KafkaLogConsumer{partitionConsumer, topic, nil, make(chan struct{}), (highOffset > 0)}, nil
+  return &KafkaLogConsumer{partitionConsumer, topic, nil, make(chan struct{}), (highOffset > lowOffset)}, nil
 }
 
 func NewKafkaLogConsumerFromURL(brokerURL, topic string, offset int64) (LogConsumer, error) {
   brokers, config := ParseKafkaURL(brokerURL)
-  if err := CreateTopicIfDoesNotExist(brokerURL, topic); err != nil {
+  if err := CreateTopicIfDoesNotExist(brokerURL, topic, 1, nil); err != nil {
     return nil, err
   }
   config.Version = sarama.V2_1_0_0
