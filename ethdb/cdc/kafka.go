@@ -34,6 +34,21 @@ func ParseKafkaURL(brokerURL string) ([]string, *sarama.Config) {
       config.Consumer.MaxWaitTime = time.Duration(maxWaittime) * time.Millisecond
     }
   }
+  switch parsedURL.Query().Get("compression.codec") {
+  case "gzip":
+    config.Producer.Compression = sarama.CompressionGZIP
+  case "none":
+    config.Producer.Compression = sarama.CompressionNone
+  case "lz4":
+    config.Producer.Compression = sarama.CompressionLZ4
+  case "zstd":
+    config.Producer.Compression = sarama.CompressionZSTD
+  case "snappy":
+    config.Producer.Compression = sarama.CompressionSnappy
+  default:
+    log.Warn("compression.codec not set or not recognized. Defaulting to snappy")
+    config.Producer.Compression = sarama.CompressionSnappy
+  }
 
   if parsedURL.User != nil {
     config.Net.SASL.Enable = true
