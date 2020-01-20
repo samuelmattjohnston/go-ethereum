@@ -175,6 +175,7 @@ func NewFuncCodec(conn deadlineCloser, encode, decode func(v interface{}) error,
 		encode:  encode,
 		decode:  decode,
 		conn:    conn,
+		ctx:     ctx,
 	}
 	if ra, ok := conn.(ConnRemoteAddr); ok {
 		codec.remote = ra.RemoteAddr()
