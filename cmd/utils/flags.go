@@ -143,6 +143,11 @@ var (
 		Usage: "Data directory for the databases and keystore",
 		Value: DirectoryString(node.DefaultDataDir()),
 	}
+	DataDirDBFlag = DirectoryFlag{
+		Name:  "datadirdb",
+		Usage: "Database to use for geth. Default is leveldb. Valid option is: 'pogreb'",
+		Value: "",
+	}
 	AncientFlag = DirectoryFlag{
 		Name:  "datadir.ancient",
 		Usage: "Data directory for ancient chain segments (default = inside chaindata)",

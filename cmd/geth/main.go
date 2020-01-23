@@ -65,6 +65,7 @@ var (
 		utils.BootnodesV4Flag,
 		utils.BootnodesV5Flag,
 		utils.DataDirFlag,
+		utils.DataDirDBFlag,
 		utils.OverlayFlag,
 		utils.AncientFlag,
 		utils.KeyStoreDirFlag,

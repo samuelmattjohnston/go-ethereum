@@ -613,9 +613,9 @@ func (n *Node) OpenDatabase(name string, cache, handles int, namespace string) (
 	var err error
 	if n.config.DataDir == "" {
 		db = rawdb.NewMemoryDatabase()
-	} else if strings.HasPrefix(name, "pogreb://") {
+	} else if n.config.DataDirDB == "pogreb" {
 		var kv ethdb.KeyValueStore
-		kv, err = pogreb.NewDatabase(n.config.ResolvePath(strings.TrimPrefix(name, "pogreb://")))
+		kv, err = pogreb.NewDatabase(n.config.ResolvePath(name))
 		db = rawdb.NewDatabase(kv)
 	} else {
 		db, err = rawdb.NewLevelDBDatabase(n.config.ResolvePath(name), cache, handles, namespace)
@@ -645,8 +645,8 @@ func (n *Node) OpenDatabaseWithFreezer(name string, cache, handles int, freezer,
 	var err error
 	if n.config.DataDir == "" {
 		db = rawdb.NewMemoryDatabase()
-	} else if strings.HasPrefix(name, "pogreb://") {
-		root := n.config.ResolvePath(strings.TrimPrefix(name, "pogreb://"))
+	} else if n.config.DataDirDB == "pogreb" {
+		root := n.config.ResolvePath(name)
 
 		switch {
 		case freezer == "":
