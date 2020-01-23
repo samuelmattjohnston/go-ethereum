@@ -1,7 +1,9 @@
 package cdc
 import (
+  "fmt"
   "github.com/ethereum/go-ethereum/ethdb"
   "github.com/ethereum/go-ethereum/rlp"
+  "github.com/ethereum/go-ethereum/log"
   "github.com/pborman/uuid"
 )
 
@@ -50,10 +52,14 @@ func (batch *BatchWrapper) Write() error {
     if len(batch.operations) > 0 {
       for _, bop := range batch.operations {
         if err := batch.writeStream.Emit(bop.Bytes()); err != nil {
+          log.Warn("Failed to write batch item", "length", len(bop.Bytes()))
+          log.Warn(fmt.Sprintf("Item bytes: %#x", bop.Bytes()))
           return err
         }
       }
       if err := batch.writeStream.Emit(op.Bytes()); err != nil {
+        log.Warn("Failed to write batch", "length", len(op.Bytes()))
+        log.Warn(fmt.Sprintf("Bytes: %#x", op.Bytes()))
         return err
       }
     }
@@ -77,6 +83,8 @@ func (db *DBWrapper) Put(key, value []byte) error {
     op, err := PutOperation(key, value)
     if err != nil { return err }
     if err = db.writeStream.Emit(op.Bytes()); err != nil {
+      log.Warn("Failed to put item", "length", len(op.Bytes()))
+      log.Warn(fmt.Sprintf("Item bytes: %#x", op.Bytes()))
       return err
     }
   }
@@ -116,7 +124,11 @@ func (db *DBWrapper) AppendAncient(number uint64, hash, header, body, receipt, t
   if db.writeStream != nil {
     op, err := AppendAncientOperation(number, hash, header, body, receipt, td)
     if err != nil { return err }
-    if err = db.writeStream.Emit(op.Bytes()); err != nil { return err }
+    if err = db.writeStream.Emit(op.Bytes()); err != nil {
+      log.Warn("Failed to append ancient", "length", len(op.Bytes()))
+      log.Warn(fmt.Sprintf("Item bytes: %#x", op.Bytes()))
+      return err
+    }
   }
   return db.db.AppendAncient(number, hash, header, body, receipt, td)
 }
@@ -126,7 +138,11 @@ func (db *DBWrapper) TruncateAncients(n uint64) error {
   if db.writeStream != nil {
     op, err := TruncateAncientsOperation(n)
     if err != nil { return err }
-    if err = db.writeStream.Emit(op.Bytes()); err != nil { return err }
+    if err = db.writeStream.Emit(op.Bytes()); err != nil {
+      log.Warn("Failed to truncate ancient", "length", len(op.Bytes()))
+      log.Warn(fmt.Sprintf("Item bytes: %#x", op.Bytes()))
+      return err
+    }
   }
   return db.db.TruncateAncients(n)
 }
@@ -136,7 +152,11 @@ func (db *DBWrapper) Sync() error {
   if db.writeStream != nil {
     op, err := SyncOperation()
     if err != nil { return err }
-    if err = db.writeStream.Emit(op.Bytes()); err != nil { return err }
+    if err = db.writeStream.Emit(op.Bytes()); err != nil {
+      log.Warn("Failed to sync", "length", len(op.Bytes()))
+      log.Warn(fmt.Sprintf("Item bytes: %#x", op.Bytes()))
+      return err
+    }
   }
   return db.db.Sync()
 }

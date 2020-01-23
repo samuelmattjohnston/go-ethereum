@@ -61,7 +61,7 @@ func txrelay(ctx *cli.Context) error {
 	brokers, config := cdc.ParseKafkaURL(brokerURL)
 	topic := ctx.GlobalString(utils.KafkaTransactionTopicFlag.Name)
 	consumerGroupID := ctx.GlobalString(utils.KafkaTransactionConsumerGroupFlag.Name)
-	if err := cdc.CreateTopicIfDoesNotExist(brokerURL, topic); err != nil {
+	if err := cdc.CreateTopicIfDoesNotExist(brokerURL, topic, 6, nil); err != nil {
 		fmt.Println("Error creating topic")
 		return err
 	}
@@ -106,4 +106,10 @@ func (h relayConsumerGroup) ConsumeClaim(sess sarama.ConsumerGroupSession, claim
 		fmt.Println("Processed a message\n")
   }
   return nil
+}
+
+type KafkaTransactionConsumer struct {
+  producer sarama.SyncProducer
+  // TODO;  sarama.SyncProducer
+  topic string
 }

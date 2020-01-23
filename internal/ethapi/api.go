@@ -486,7 +486,7 @@ func (s *PrivateAccountAPI) InitializeWallet(ctx context.Context, url string) (s
 	case *scwallet.Wallet:
 		return mnemonic, wallet.Initialize(seed)
 	default:
-		return "", fmt.Errorf("Specified wallet does not support initialization")
+		return "", fmt.Errorf("specified wallet does not support initialization")
 	}
 }
 
@@ -501,7 +501,7 @@ func (s *PrivateAccountAPI) Unpair(ctx context.Context, url string, pin string) 
 	case *scwallet.Wallet:
 		return wallet.Unpair([]byte(pin))
 	default:
-		return fmt.Errorf("Specified wallet does not support pairing")
+		return fmt.Errorf("specified wallet does not support pairing")
 	}
 }
 
@@ -804,12 +804,14 @@ func DoCall(ctx context.Context, b Backend, args CallArgs, blockNrOrHash rpc.Blo
 		}
 	}
 	// Set default gas & gas price if none were set
-	gas := globalGasCap.Uint64()
+	gas := uint64(math.MaxUint64 / 2)
 	if args.Gas != nil {
 		gas = uint64(*args.Gas)
 	}
 	if globalGasCap != nil && globalGasCap.Uint64() < gas {
-		log.Warn("Caller gas above allowance, capping", "requested", gas, "cap", globalGasCap)
+		if args.Gas != nil {
+			log.Warn("Caller gas above allowance, capping", "requested", gas, "cap", globalGasCap)
+		}
 		gas = globalGasCap.Uint64()
 	}
 	gasPrice := new(big.Int).SetUint64(defaultGasPrice)
@@ -916,6 +918,18 @@ func DoEstimateGas(ctx context.Context, b Backend, args CallArgs, blockNrOrHash 
 	}
 	cap = hi
 
+	// Set sender address or use a default if none specified
+	if args.From == nil {
+		if wallets := b.AccountManager().Wallets(); len(wallets) > 0 {
+			if accounts := wallets[0].Accounts(); len(accounts) > 0 {
+				args.From = &accounts[0].Address
+			}
+		}
+	}
+	// Use zero-address if none other is available
+	if args.From == nil {
+		args.From = &common.Address{}
+	}
 	// Create a helper to check if a gas allowance results in an executable transaction
 	executable := func(gas uint64) bool {
 		args.Gas = (*hexutil.Uint64)(&gas)
@@ -1387,7 +1401,7 @@ func (args *SendTxArgs) setDefaults(ctx context.Context, b Backend) error {
 		args.Nonce = (*hexutil.Uint64)(&nonce)
 	}
 	if args.Data != nil && args.Input != nil && !bytes.Equal(*args.Data, *args.Input) {
-		return errors.New(`Both "data" and "input" are set and not equal. Please use "input" to pass transaction call data.`)
+		return errors.New(`both "data" and "input" are set and not equal. Please use "input" to pass transaction call data`)
 	}
 	if args.To == nil {
 		// Contract creation
@@ -1643,7 +1657,7 @@ func (s *PublicTransactionPoolAPI) Resend(ctx context.Context, sendArgs SendTxAr
 		}
 	}
 
-	return common.Hash{}, fmt.Errorf("Transaction %#x not found", matchTx.Hash())
+	return common.Hash{}, fmt.Errorf("transaction %#x not found", matchTx.Hash())
 }
 
 // PublicDebugAPI is the collection of Ethereum APIs exposed over the public
