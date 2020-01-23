@@ -30,6 +30,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/ethdb/cdc"
+	"github.com/ethereum/go-ethereum/ethdb/pogreb"
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/internal/debug"
 	"github.com/ethereum/go-ethereum/log"
@@ -612,6 +613,10 @@ func (n *Node) OpenDatabase(name string, cache, handles int, namespace string) (
 	var err error
 	if n.config.DataDir == "" {
 		db = rawdb.NewMemoryDatabase()
+	} else if strings.HasPrefix(name, "pogreb://") {
+		var kv ethdb.KeyValueStore
+		kv, err = pogreb.NewDatabase(n.config.ResolvePath(strings.TrimPrefix(name, "pogreb://")))
+		db = rawdb.NewDatabase(kv)
 	} else {
 		db, err = rawdb.NewLevelDBDatabase(n.config.ResolvePath(name), cache, handles, namespace)
 	}
@@ -640,7 +645,24 @@ func (n *Node) OpenDatabaseWithFreezer(name string, cache, handles int, freezer,
 	var err error
 	if n.config.DataDir == "" {
 		db = rawdb.NewMemoryDatabase()
-	} else {
+	} else if strings.HasPrefix(name, "pogreb://") {
+		root := n.config.ResolvePath(strings.TrimPrefix(name, "pogreb://"))
+
+		switch {
+		case freezer == "":
+			freezer = filepath.Join(root, "ancient")
+		case !filepath.IsAbs(freezer):
+			freezer = n.config.ResolvePath(freezer)
+		}
+		kv, err := pogreb.NewDatabase(root)
+		if err != nil {
+			return nil, err
+		}
+		db, err = rawdb.NewDatabaseWithFreezer(kv, freezer, namespace)
+		if err != nil {
+			return nil, err
+		}
+	}  else {
 		root := n.config.ResolvePath(name)
 
 		switch {
