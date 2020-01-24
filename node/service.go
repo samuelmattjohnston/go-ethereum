@@ -19,12 +19,15 @@ package node
 import (
 	"path/filepath"
 	"reflect"
+	"os"
 
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/ethdb/cdc"
+	"github.com/ethereum/go-ethereum/ethdb/pogreb"
 	"github.com/ethereum/go-ethereum/event"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/rpc"
 )
@@ -47,9 +50,19 @@ func (ctx *ServiceContext) OpenDatabase(name string, cache int, handles int, nam
 	var err error
 	if ctx.config.DataDir == "" {
 		db = rawdb.NewMemoryDatabase()
+	} else if ctx.config.DataDirDB == "pogreb" {
+		log.Info("Starting with pogrebdb Pog")
+		var kv ethdb.KeyValueStore
+		kv, err = pogreb.NewDatabase(ctx.config.ResolvePath(name))
+		db = rawdb.NewDatabase(kv)
 	} else {
+		log.Info(ctx.config.DataDirDB)
 		db, err = rawdb.NewLevelDBDatabase(ctx.config.ResolvePath(name), cache, handles, namespace)
-		if ctx.config.KafkaLogBroker != "" {
+	}
+	if err != nil {
+		return db, err
+	}
+	if ctx.config.KafkaLogBroker != "" {
 	   producer, err := cdc.NewKafkaLogProducerFromURL(
 	           ctx.config.KafkaLogBroker,
 	           ctx.config.KafkaLogTopic,
@@ -57,8 +70,7 @@ func (ctx *ServiceContext) OpenDatabase(name string, cache int, handles int, nam
 	   if err != nil { return nil, err }
 	   // TODO: Add options for a readStream
 	   db = cdc.NewDBWrapper(db, producer, nil)
-		}
-	}
+	 }
 	return db, err
 }
 
@@ -96,7 +108,24 @@ func (ctx *ServiceContext) OpenRawDatabaseWithFreezer(name string, cache int, ha
 	case !filepath.IsAbs(freezer):
 		freezer = ctx.config.ResolvePath(freezer)
 	}
+	if ctx.config.DataDirDB == "pogreb" {
+		log.Info("Starting with pogrebdb Pog")
+		kv, err := pogreb.NewDatabase(root)
+		if err != nil {
+			return nil, err
+		}
+		_, err = os.Lstat(freezer)
+		if err != nil {
+			log.Info(err.Error(), "freezer",freezer)
+		}
+		db, err := rawdb.NewDatabaseWithFreezer(kv, freezer, namespace)
+		if err != nil {
+			return db, err
+		}
+		return  db, err
+	}
 	return rawdb.NewLevelDBDatabaseWithFreezer(root, cache, handles, freezer, namespace)
+
 }
 
 // ResolvePath resolves a user path into the data directory if that was relative

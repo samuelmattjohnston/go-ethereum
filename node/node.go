@@ -614,6 +614,7 @@ func (n *Node) OpenDatabase(name string, cache, handles int, namespace string) (
 	if n.config.DataDir == "" {
 		db = rawdb.NewMemoryDatabase()
 	} else if n.config.DataDirDB == "pogreb" {
+		n.log.Debug("Starting a pogrebdb pog")
 		var kv ethdb.KeyValueStore
 		kv, err = pogreb.NewDatabase(n.config.ResolvePath(name))
 		db = rawdb.NewDatabase(kv)
@@ -646,6 +647,7 @@ func (n *Node) OpenDatabaseWithFreezer(name string, cache, handles int, freezer,
 	if n.config.DataDir == "" {
 		db = rawdb.NewMemoryDatabase()
 	} else if n.config.DataDirDB == "pogreb" {
+		n.log.Debug("Starting a pogrebdb pog")
 		root := n.config.ResolvePath(name)
 
 		switch {

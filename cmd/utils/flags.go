@@ -146,7 +146,6 @@ var (
 	DataDirDBFlag = DirectoryFlag{
 		Name:  "datadirdb",
 		Usage: "Database to use for geth. Default is leveldb. Valid option is: 'pogreb'",
-		Value: "",
 	}
 	AncientFlag = DirectoryFlag{
 		Name:  "datadir.ancient",
@@ -1241,7 +1240,8 @@ func SetNodeConfig(ctx *cli.Context, cfg *node.Config) {
 	cfg.KafkaLogTopic = ctx.GlobalString(KafkaLogTopicFlag.Name)
 	cfg.KafkaTransactionTopic = ctx.GlobalString(KafkaTransactionTopicFlag.Name)
 	cfg.ReplicaSyncShutdown = ctx.GlobalBool(ReplicaSyncShutdownFlag.Name)
-
+	log.Debug("DatadirDB is set to: ", ctx.GlobalString(DataDirDBFlag.Name))
+	cfg.DataDirDB = ctx.GlobalString(DataDirDBFlag.Name)
 	setDataDir(ctx, cfg)
 	setSmartCard(ctx, cfg)
 
