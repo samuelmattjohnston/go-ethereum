@@ -44,6 +44,7 @@ func (s *Server) ServeListener(l net.Listener) error {
 					cancel()
 					break
 				}
+				// TODO: Refactor with ticker (and make sure you close it)
 				time.Sleep(100 * time.Millisecond)
 			}
 		}()
