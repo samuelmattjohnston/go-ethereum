@@ -50,6 +50,22 @@ func ParseKafkaURL(brokerURL string) ([]string, *sarama.Config) {
     config.Producer.Compression = sarama.CompressionSnappy
   }
 
+  if val, err := strconv.Atoi(parsedURL.Query().Get("message.send.max.retries")); err == nil {
+    config.Producer.Retry.Max = val
+  } else {
+    config.Producer.Retry.Max = 10000000
+  }
+
+  if val, err := strconv.Atoi(parsedURL.Query().Get("retry.backoff.ms")); err == nil {
+    config.Producer.Retry.Backoff = time.Duration(val) * time.Millisecond
+  }
+  if val, err := strconv.Atoi(parsedURL.Query().Get("net.maxopenrequests")); err == nil {
+    config.Net.MaxOpenRequests = val
+  }
+  if parsedURL.Query().Get("idempotent") == "1" {
+    config.Producer.Idempotent = true
+  }
+
   if parsedURL.User != nil {
     config.Net.SASL.Enable = true
     config.Net.SASL.User = parsedURL.User.Username()
