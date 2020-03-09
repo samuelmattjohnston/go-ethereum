@@ -184,8 +184,12 @@ func (r *Replica) Start(server *p2p.Server) error {
 }
 func (r *Replica) Stop() error {
   r.db.Close()
-  r.graphql.Stop()
-  r.transactionConsumer.Close()
+  if r.graphql != nil {
+    r.graphql.Stop()
+  }
+  if r.transactionConsumer != nil {
+    r.transactionConsumer.Close()
+  }
   return nil
 }
 

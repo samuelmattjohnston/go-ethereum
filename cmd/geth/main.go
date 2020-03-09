@@ -428,7 +428,7 @@ func startNode(ctx *cli.Context, stack *node.Node) {
 	}
 
 	// Start auxiliary services if enabled
-	if ctx.GlobalBool(utils.MiningEnabledFlag.Name) || ctx.GlobalBool(utils.DeveloperFlag.Name) || ctx.GlobalBool(utils.DeveloperFlag.Name) || ctx.GlobalString(utils.KafkaTransactionPoolTopicFlag.Name) != "" {
+	if ctx.GlobalBool(utils.MiningEnabledFlag.Name) || ctx.GlobalBool(utils.DeveloperFlag.Name) || ctx.GlobalBool(utils.DeveloperFlag.Name) || ctx.GlobalString(utils.KafkaTransactionPoolTopicFlag.Name) != "" || ctx.GlobalString(utils.KafkaEventTopicFlag.Name) != "" {
 		// Mining only makes sense if a full Ethereum node is running
 		if ctx.GlobalString(utils.SyncModeFlag.Name) == "light" {
 			utils.Fatalf("Light clients do not support mining")
@@ -454,6 +454,14 @@ func startNode(ctx *cli.Context, stack *node.Node) {
 				producer.RelayTransactions(ethereum.TxPool())
 			} else {
 				log.Info("Pool topic missing")
+			}
+			if eventTopic := ctx.GlobalString(utils.KafkaEventTopicFlag.Name); eventTopic != "" {
+				producer, err := replicaModule.NewKafkaEventProducerFromURLS(brokerURL, eventTopic)
+				if err != nil {
+					utils.Fatalf("Failed to create event producer for %v - %v", brokerURL, eventTopic)
+				}
+				log.Info("Starting Kafka event producer relay", "broker", brokerURL, "topic", eventTopic)
+				producer.RelayEvents(ethereum.BlockChain)	
 			}
 		} else {
 			log.Info("Broker url missing")

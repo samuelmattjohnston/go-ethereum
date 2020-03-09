@@ -578,5 +578,6 @@ func NewTestReplicaBackend(db ethdb.Database, hc *core.HeaderChain, bc *core.Blo
     eventMux: new(event.TypeMux),
     shutdownChan: make(chan bool),
   }
+  backend.txPool, _ = core.NewReplicaTxPool(core.DefaultTxPoolConfig, backend.chainConfig, backend.bc, backend)
   return backend
 }

@@ -720,6 +720,11 @@ var (
 		 Usage: "Kafka transaction pool topic name",
 		 Value: "",
 	}
+	KafkaEventTopicFlag = cli.StringFlag{
+		 Name: "kafka.event.topic",
+		 Usage: "Kafka event topic name",
+		 Value: "",
+	}
 	KafkaTransactionConsumerGroupFlag = cli.StringFlag{
 		 Name: "kafka.tx.consumergroup",
 		 Usage: "Kafka transaction consumer group name",

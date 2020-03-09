@@ -3,9 +3,10 @@
 import (
   "github.com/ethereum/go-ethereum/consensus/ethash"
   "github.com/ethereum/go-ethereum/eth"
-  "github.com/ethereum/go-ethereum/ethdb"
+  "github.com/ethereum/go-ethereum/core/rawdb"
   "github.com/ethereum/go-ethereum/ethdb/cdc"
   "github.com/ethereum/go-ethereum/replica"
+  "github.com/ethereum/go-ethereum/rpc"
   "testing"
 )
 
@@ -13,10 +14,10 @@ import (
 func TestReplicaConstants(t *testing.T) {
   _, consumer := cdc.MockLogPair()
   transactionProducer := &MockTransactionProducer{}
-  db := ethdb.NewMemDatabase()
+  db := rawdb.NewMemoryDatabase()
   config := eth.DefaultConfig
   config.Ethash.PowMode = ethash.ModeFake
-  replicaNode, err := replica.NewReplica(db, &config, nil, transactionProducer, consumer, false, 0, 0, 0)
+  replicaNode, err := replica.NewReplica(db, &config, nil, transactionProducer, consumer, nil, false, 0, 0, 0, false, "", []string{}, []string{}, rpc.HTTPTimeouts{}, 0, "")
   if err != nil {
     t.Errorf(err.Error())
   }
@@ -34,10 +35,10 @@ func TestReplicaConstants(t *testing.T) {
 func TestReplicaAPIs(t *testing.T) {
   _, consumer := cdc.MockLogPair()
   transactionProducer := &MockTransactionProducer{}
-  db := ethdb.NewMemDatabase()
+  db := rawdb.NewMemoryDatabase()
   config := eth.DefaultConfig
   config.Ethash.PowMode = ethash.ModeFake
-  replicaNode, err := replica.NewReplica(db, &config, nil, transactionProducer, consumer, false, 0, 0, 0)
+  replicaNode, err := replica.NewReplica(db, &config, nil, transactionProducer, consumer, nil, false, 0, 0, 0, false, "", []string{}, []string{}, rpc.HTTPTimeouts{}, 0, "")
   if err != nil {
     t.Errorf(err.Error())
   }
