@@ -1,11 +1,10 @@
-  package replica_test
+  package replica
 
 import (
   "github.com/ethereum/go-ethereum/consensus/ethash"
   "github.com/ethereum/go-ethereum/eth"
   "github.com/ethereum/go-ethereum/core/rawdb"
   "github.com/ethereum/go-ethereum/ethdb/cdc"
-  "github.com/ethereum/go-ethereum/replica"
   "github.com/ethereum/go-ethereum/rpc"
   "testing"
 )
@@ -17,7 +16,7 @@ func TestReplicaConstants(t *testing.T) {
   db := rawdb.NewMemoryDatabase()
   config := eth.DefaultConfig
   config.Ethash.PowMode = ethash.ModeFake
-  replicaNode, err := replica.NewReplica(db, &config, nil, transactionProducer, consumer, nil, false, 0, 0, 0, false, "", []string{}, []string{}, rpc.HTTPTimeouts{}, 0, "")
+  replicaNode, err := NewReplica(db, &config, nil, transactionProducer, consumer, nil, false, 0, 0, 0, false, "", []string{}, []string{}, rpc.HTTPTimeouts{}, 0, "")
   if err != nil {
     t.Errorf(err.Error())
   }
@@ -38,7 +37,7 @@ func TestReplicaAPIs(t *testing.T) {
   db := rawdb.NewMemoryDatabase()
   config := eth.DefaultConfig
   config.Ethash.PowMode = ethash.ModeFake
-  replicaNode, err := replica.NewReplica(db, &config, nil, transactionProducer, consumer, nil, false, 0, 0, 0, false, "", []string{}, []string{}, rpc.HTTPTimeouts{}, 0, "")
+  replicaNode, err := NewReplica(db, &config, nil, transactionProducer, consumer, nil, false, 0, 0, 0, false, "", []string{}, []string{}, rpc.HTTPTimeouts{}, 0, "")
   if err != nil {
     t.Errorf(err.Error())
   }

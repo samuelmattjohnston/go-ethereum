@@ -1,10 +1,9 @@
-package replica_test
+package replica
 
 import (
   "bytes"
   "github.com/ethereum/go-ethereum/common"
   "github.com/ethereum/go-ethereum/common/hexutil"
-  "github.com/ethereum/go-ethereum/replica"
   "testing"
 )
 
@@ -14,7 +13,7 @@ func TestPublicConstants(t *testing.T) {
   if err != nil {
     t.Fatalf(err.Error())
   }
-  publicAPI := replica.NewPublicEthereumAPI(backend)
+  publicAPI := NewPublicEthereumAPI(backend)
   emptyAddress := common.Address{}
   addr, err := publicAPI.Etherbase()
   if err != nil {
@@ -42,7 +41,7 @@ func TestPublicChainID(t *testing.T) {
   if err != nil {
     t.Fatalf(err.Error())
   }
-  publicAPI := replica.NewPublicEthereumAPI(backend)
+  publicAPI := NewPublicEthereumAPI(backend)
   if publicAPI.ChainId() != hexutil.Uint64(backend.ProtocolVersion()) {
     t.Errorf("Unexpected chainid %v", publicAPI.ChainId())
   }

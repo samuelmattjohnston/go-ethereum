@@ -1,4 +1,4 @@
-package replica_test
+package replica
 
 import (
   // "fmt"
@@ -15,7 +15,6 @@ import (
   "github.com/ethereum/go-ethereum/core/vm"
   "github.com/ethereum/go-ethereum/params"
   // "github.com/ethereum/go-ethereum/node"
-  "github.com/ethereum/go-ethereum/replica"
   "github.com/ethereum/go-ethereum/rpc"
   "testing"
   "time"
@@ -39,7 +38,7 @@ func (producer *MockTransactionProducer) Close() {
 
 func (producer *MockTransactionProducer) RelayTransactions(*core.TxPool) {}
 
-func testReplicaBackend() (*replica.ReplicaBackend, *MockTransactionProducer, error) {
+func testReplicaBackend() (*ReplicaBackend, *MockTransactionProducer, error) {
   var (
 		db      = rawdb.NewMemoryDatabase()
     // funds   = big.NewInt(1000000000)
@@ -58,7 +57,7 @@ func testReplicaBackend() (*replica.ReplicaBackend, *MockTransactionProducer, er
     return nil, nil, err
   }
   txProducer := &MockTransactionProducer{}
-  return replica.NewTestReplicaBackend(db, hc, bc, txProducer), txProducer, nil
+  return NewTestReplicaBackend(db, hc, bc, txProducer), txProducer, nil
 }
 
 func TestProtocolVersion(t *testing.T) {
