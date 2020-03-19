@@ -4,19 +4,37 @@ import (
   "math/big"
   "github.com/ethereum/go-ethereum/common"
   "github.com/ethereum/go-ethereum/core"
+  "github.com/ethereum/go-ethereum/event"
   "github.com/ethereum/go-ethereum/core/types"
+  "github.com/Shopify/sarama/mocks"
   "reflect"
   "runtime"
   "testing"
-  // "time"
-  // "fmt"
+  "time"
+  "fmt"
 )
 
-func getTestProducer() *KafkaEventProducer {
+type mockChainEventProvider struct {
+  kv map[common.Hash]core.ChainEvent
+}
+
+func (cep *mockChainEventProvider) GetBlock(h common.Hash) (*types.Block, error) {
+  if ce, ok := cep.kv[h]; ok { return ce.Block, nil }
+  return nil, fmt.Errorf("Block Not found %#x", h)
+}
+func (cep *mockChainEventProvider) GetChainEvent(h common.Hash, n uint64) (core.ChainEvent, error) {
+  if ce, ok := cep.kv[h]; ok { return ce, nil }
+  return core.ChainEvent{}, fmt.Errorf("CE Not found %#x", h)
+}
+
+
+func getTestProducer(kv map[common.Hash]core.ChainEvent) *KafkaEventProducer {
+  if kv == nil { kv = make(map[common.Hash]core.ChainEvent) }
   return &KafkaEventProducer{
     nil,
     "",
     false,
+    &mockChainEventProvider{kv},
   }
 }
 
@@ -87,7 +105,7 @@ func getTestLog(block *types.Block) *types.Log {
 }
 
 func TestGetProducerMessages(t *testing.T) {
-  producer := getTestProducer()
+  producer := getTestProducer(nil)
   header := getTestHeader(0, 0, nil)
   block := types.NewBlock(header, []*types.Transaction{}, []*types.Header{}, []*types.Receipt{})
   event := core.ChainEvent{Block: block, Hash: block.Hash(), Logs: []*types.Log{getTestLog(block)}}
@@ -124,17 +142,24 @@ func expectToConsume(name string, ch interface{}, count int, t *testing.T) {
   }
 }
 
-func getMessages(header *types.Header, producer *KafkaEventProducer, t *testing.T) [][]byte {
-  block := types.NewBlock(header, []*types.Transaction{}, []*types.Header{}, []*types.Receipt{})
-  event := core.ChainEvent{Block: block, Hash: block.Hash(), Logs: []*types.Log{getTestLog(block)}}
+func getMessages(header *types.Header, producer *KafkaEventProducer, kv map[common.Hash]core.ChainEvent, t *testing.T) [][]byte {
+  event := getChainEvent(header)
   messages, err := producer.getMessages(event)
   if err != nil { t.Errorf(err.Error()) }
+  if kv != nil {
+    kv[event.Hash] = event
+  }
   return messages
 }
 
+func getChainEvent(header *types.Header) core.ChainEvent {
+  block := types.NewBlock(header, []*types.Transaction{}, []*types.Header{}, []*types.Receipt{})
+  return core.ChainEvent{Block: block, Hash: block.Hash(), Logs: []*types.Log{getTestLog(block)}}
+}
+
 func TestGetConsumerMessages(t *testing.T) {
-  producer := getTestProducer()
-  messages := getMessages(getTestHeader(0, 0, nil), producer, t)
+  producer := getTestProducer(nil)
+  messages := getMessages(getTestHeader(0, 0, nil), producer, nil, t)
   consumer, logsEventCh, removedLogsEventCh, chainEventCh, chainHeadEventCh, chainSideEventCh, close := getTestConsumer()
   defer close()
   for _, msg := range messages {
@@ -149,11 +174,11 @@ func TestGetConsumerMessages(t *testing.T) {
 }
 
 func TestPreReorgMessages(t *testing.T) {
-  producer := getTestProducer()
+  producer := getTestProducer(nil)
   root := getTestHeader(0, 0, nil)
-  messages := getMessages(root, producer, nil)
-  messages = append(messages, getMessages(getTestHeader(1, 0, root), producer, t)...)
-  messages = append(messages, getMessages(getTestHeader(1, 1, root), producer, t)...)
+  messages := getMessages(root, producer, nil, t)
+  messages = append(messages, getMessages(getTestHeader(1, 0, root), producer, nil, t)...)
+  messages = append(messages, getMessages(getTestHeader(1, 1, root), producer, nil, t)...)
   consumer, logsEventCh, removedLogsEventCh, chainEventCh, chainHeadEventCh, chainSideEventCh, close := getTestConsumer()
   defer close()
   for _, msg := range messages {
@@ -167,13 +192,13 @@ func TestPreReorgMessages(t *testing.T) {
   expectToConsume("chainSideEventCh", chainSideEventCh, 0, t)
 }
 func TestNoReorgMessages(t *testing.T) {
-  producer := getTestProducer()
+  producer := getTestProducer(nil)
   root := getTestHeader(0, 0, nil)
-  messages := getMessages(root, producer, nil)
+  messages := getMessages(root, producer, nil, t)
   base := getTestHeader(1, 0, root)
-  messages = append(messages, getMessages(base, producer, t)...)
-  messages = append(messages, getMessages(getTestHeader(1, 1, root), producer, t)...)
-  messages = append(messages, getMessages(getTestHeader(2, 0, base), producer, t)...)
+  messages = append(messages, getMessages(base, producer, nil, t)...)
+  messages = append(messages, getMessages(getTestHeader(1, 1, root), producer, nil, t)...)
+  messages = append(messages, getMessages(getTestHeader(2, 0, base), producer, nil, t)...)
   consumer, logsEventCh, removedLogsEventCh, chainEventCh, chainHeadEventCh, chainSideEventCh, close := getTestConsumer()
   defer close()
   for _, msg := range messages {
@@ -187,13 +212,13 @@ func TestNoReorgMessages(t *testing.T) {
   expectToConsume("chainSideEventCh", chainSideEventCh, 0, t)
 }
 func TestReorgMessages(t *testing.T) {
-  producer := getTestProducer()
+  producer := getTestProducer(nil)
   root := getTestHeader(0, 0, nil)
-  messages := getMessages(root, producer, nil)
+  messages := getMessages(root, producer, nil, t)
   base := getTestHeader(1, 1, root)
-  messages = append(messages, getMessages(getTestHeader(1, 2, root), producer, t)...)
-  messages = append(messages, getMessages(base, producer, t)...)
-  messages = append(messages, getMessages(getTestHeader(2, 3, base), producer, t)...)
+  messages = append(messages, getMessages(getTestHeader(1, 2, root), producer, nil, t)...)
+  messages = append(messages, getMessages(base, producer, nil, t)...)
+  messages = append(messages, getMessages(getTestHeader(2, 3, base), producer, nil, t)...)
   consumer, logsEventCh, removedLogsEventCh, chainEventCh, chainHeadEventCh, chainSideEventCh, close := getTestConsumer()
   defer close()
   for _, msg := range messages {
@@ -205,4 +230,41 @@ func TestReorgMessages(t *testing.T) {
   expectToConsume("chainEventCh", chainEventCh, 4, t)
   expectToConsume("chainHeadEventCh", chainHeadEventCh, 4, t)
   expectToConsume("chainSideEventCh", chainSideEventCh, 1, t)
+}
+type eventSubscriber struct {
+  feed event.Feed
+}
+
+func (es *eventSubscriber) SubscribeChainEvent(ch chan<- core.ChainEvent) event.Subscription {
+  return es.feed.Subscribe(ch)
+}
+
+func TestReorgNotEmittedMessages(t *testing.T) {
+  kv := make(map[common.Hash]core.ChainEvent)
+  producer := getTestProducer(kv)
+  es := &eventSubscriber{}
+  mockProducer := mocks.NewSyncProducer(t, nil)
+  producer.producer = mockProducer
+  for i := 0; i < 12; i ++ {
+    mockProducer.ExpectSendMessageAndSucceed()
+  }
+  producer.RelayEvents(es)
+  runtime.Gosched() // Make sure subscriptions get set up before we start sending
+  root := getTestHeader(0, 0, nil)
+  rootCe := getChainEvent(root)
+  base := getTestHeader(1, 1, root)
+  uncle := getChainEvent(getTestHeader(1, 2, root))
+  baseCe := getChainEvent(base)
+  finalCe := getChainEvent(getTestHeader(2, 3, base))
+  kv[baseCe.Hash] = baseCe
+  kv[uncle.Hash] = uncle
+  kv[rootCe.Hash] = rootCe
+  es.feed.Send(rootCe)
+  es.feed.Send(uncle)
+  // Note that we never send base, but still expect it to get emitted because
+  // it's finalCe's parent and available in the ChainEventProvider
+  es.feed.Send(finalCe)
+  runtime.Gosched()
+  time.Sleep(200 * time.Millisecond)
+  producer.Close()
 }

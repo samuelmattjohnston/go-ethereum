@@ -457,7 +457,7 @@ func startNode(ctx *cli.Context, stack *node.Node) {
 				log.Info("Pool topic missing")
 			}
 			if eventTopic := ctx.GlobalString(utils.KafkaEventTopicFlag.Name); eventTopic != "" {
-				producer, err := replicaModule.NewKafkaEventProducerFromURLs(brokerURL, eventTopic)
+				producer, err := replicaModule.NewKafkaEventProducerFromURLs(brokerURL, eventTopic, ethereum.ChainDb())
 				if err != nil {
 					utils.Fatalf("Failed to create event producer for %v - %v", brokerURL, eventTopic)
 				}

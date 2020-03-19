@@ -6,11 +6,13 @@ import (
   "fmt"
   "github.com/ethereum/go-ethereum/common"
   "github.com/ethereum/go-ethereum/core"
+  "github.com/ethereum/go-ethereum/core/rawdb"
   "github.com/ethereum/go-ethereum/core/types"
   "github.com/ethereum/go-ethereum/event"
   "github.com/ethereum/go-ethereum/rlp"
   "github.com/ethereum/go-ethereum/log"
   "github.com/ethereum/go-ethereum/ethdb/cdc"
+  "github.com/ethereum/go-ethereum/ethdb"
   // "encoding/hex"
 )
 
@@ -20,10 +22,41 @@ const (
   EmitMsg = byte(2)
 )
 
+type chainEventProvider interface {
+  GetChainEvent(common.Hash, uint64) (core.ChainEvent, error)
+  GetBlock(common.Hash) (*types.Block, error)
+}
+
+type dbChainEventProvider struct {
+  db ethdb.Database
+}
+
+func (cep *dbChainEventProvider) GetBlock(h common.Hash) (*types.Block, error) {
+  n := *rawdb.ReadHeaderNumber(cep.db, h)
+  block := rawdb.ReadBlock(cep.db, h, n)
+  if block == nil { return nil, fmt.Errorf("Error retrieving block %#x", h)}
+  return block, nil
+}
+func (cep *dbChainEventProvider) GetChainEvent(h common.Hash, n uint64) (core.ChainEvent, error) {
+  block := rawdb.ReadBlock(cep.db, h, n)
+  if block == nil { return core.ChainEvent{}, fmt.Errorf("Block %#x missing from database", h)}
+  receipts := rawdb.ReadRawReceipts(cep.db, h, n)
+  logs := []*types.Log{}
+  if receipts != nil {
+    // Receipts will be nil if the list is empty, so this is not an error condition
+    for _, receipt := range receipts {
+      logs = append(logs, receipt.Logs...)
+    }
+  }
+  return core.ChainEvent{Block: block, Hash: block.Hash(), Logs: logs}, nil
+}
+
+
 type KafkaEventProducer struct {
   producer sarama.SyncProducer
   topic string
   closed bool
+  cep chainEventProvider
 }
 
 func (producer *KafkaEventProducer) Close() {
@@ -67,12 +100,47 @@ type ChainEventSubscriber interface {
 }
 
 func (producer *KafkaEventProducer) RelayEvents(bc ChainEventSubscriber) {
-  ceCh := make(chan core.ChainEvent, 100)
-  subscription := bc.SubscribeChainEvent(ceCh)
   go func() {
+    ceCh := make(chan core.ChainEvent, 100)
+    subscription := bc.SubscribeChainEvent(ceCh)
+    recentHashes := make(map[common.Hash]struct{})
+    olderHashes := make(map[common.Hash]struct{})
+    lastEmitted := common.Hash{}
+    setTest := func (k common.Hash) bool {
+      if _, ok := recentHashes[k]; ok { return true }
+      _, ok := olderHashes[k]
+      return ok
+    }
+    setAdd := func(k common.Hash) {
+      recentHashes[k] = struct{}{}
+      if len(recentHashes) > 128 {
+        olderHashes = recentHashes
+        recentHashes = make(map[common.Hash]struct{})
+      }
+      lastEmitted = k
+    }
+    first := true
     for ce := range ceCh {
-      if err := producer.Emit(ce); err != nil {
-        log.Error("Failed to produce event log: %v", err.Error())
+      if first || setTest(ce.Block.ParentHash()) {
+        if err := producer.Emit(ce); err != nil {
+          log.Error("Failed to produce event log: %v", err.Error())
+        }
+        setAdd(ce.Hash)
+        first = false
+      } else {
+        newBlocks, err := producer.getNewBlockAncestors(ce, lastEmitted)
+        if err != nil {
+          log.Error("Failed to find new block ancestors", "block", ce.Hash, "parent", ce.Block.ParentHash(), "le", lastEmitted, "error", err)
+          continue
+        }
+        for _, pce := range newBlocks {
+          if !setTest(pce.Hash) {
+            if err := producer.Emit(ce); err != nil {
+              log.Error("Failed to produce event log: %v", err.Error())
+            }
+            setAdd(pce.Hash)
+          }
+        }
       }
     }
     log.Warn("Event emitter shutting down")
@@ -80,7 +148,30 @@ func (producer *KafkaEventProducer) RelayEvents(bc ChainEventSubscriber) {
   }()
 }
 
-func NewKafkaEventProducerFromURLs(brokerURL, topic string) (EventProducer, error) {
+func (producer *KafkaEventProducer) getNewBlockAncestors(ce core.ChainEvent, h common.Hash) ([]core.ChainEvent, error) {
+  var err error
+  oldBlock, err := producer.cep.GetBlock(h)
+  if err != nil { return nil, err }
+  newBlocks := []core.ChainEvent{ce}
+  for {
+    if oldBlock.Hash() == ce.Hash {
+      // If we have a match, we're done, return them.
+      return newBlocks, nil
+    } else if ce.Block.NumberU64() <= oldBlock.NumberU64() {
+      // oldBlock has a higher or equal number, but the blocks aren't equal.
+      // Walk back the oldBlock
+      oldBlock, err = producer.cep.GetBlock(oldBlock.ParentHash())
+      if err != nil { return nil, err }
+    } else if ce.Block.NumberU64() > oldBlock.NumberU64() {
+      // the new block has a higher number, walk it back
+      ce, err = producer.cep.GetChainEvent(ce.Block.ParentHash(), ce.Block.NumberU64() - 1)
+      if err != nil { return nil, err }
+      newBlocks = append([]core.ChainEvent{ce}, newBlocks...)
+    }
+  }
+}
+
+func NewKafkaEventProducerFromURLs(brokerURL, topic string, db ethdb.Database) (EventProducer, error) {
   configEntries := make(map[string]*string)
   configEntries["retention.ms"] = strPtr("3600000")
   brokers, config := cdc.ParseKafkaURL(brokerURL)
@@ -92,11 +183,11 @@ func NewKafkaEventProducerFromURLs(brokerURL, topic string) (EventProducer, erro
   if err != nil {
     return nil, err
   }
-  return NewKafkaEventProducer(producer, topic), nil
+  return NewKafkaEventProducer(producer, topic, &dbChainEventProvider{db}), nil
 }
 
-func NewKafkaEventProducer(producer sarama.SyncProducer, topic string) (EventProducer) {
-  return &KafkaEventProducer{producer, topic, false}
+func NewKafkaEventProducer(producer sarama.SyncProducer, topic string, cep chainEventProvider) (EventProducer) {
+  return &KafkaEventProducer{producer, topic, false, cep}
 }
 
 type KafkaEventConsumer struct {
