@@ -40,7 +40,9 @@ func (cep *dbChainEventProvider) GetBlock(h common.Hash) (*types.Block, error) {
 func (cep *dbChainEventProvider) GetChainEvent(h common.Hash, n uint64) (core.ChainEvent, error) {
   block := rawdb.ReadBlock(cep.db, h, n)
   if block == nil { return core.ChainEvent{}, fmt.Errorf("Block %#x missing from database", h)}
-  receipts := rawdb.ReadRawReceipts(cep.db, h, n)
+  genesisHash := rawdb.ReadCanonicalHash(cep.db, 0)
+  chainConfig := rawdb.ReadChainConfig(cep.db, genesisHash)
+  receipts := rawdb.ReadReceipts(cep.db, h, n, chainConfig)
   logs := []*types.Log{}
   if receipts != nil {
     // Receipts will be nil if the list is empty, so this is not an error condition
@@ -360,7 +362,7 @@ func findCommonAncestor(newHead, oldHead *core.ChainEvent, mappings []map[common
       parentHash := newHead.Block.ParentHash()
       newHead = getFromMappings(parentHash, mappings)
       if newHead == nil {
-        return reverted, newBlocks, fmt.Errorf("Block %#x missing from database", parentHash)
+        return reverted, newBlocks, fmt.Errorf("Block %#x missing from history", parentHash)
       }
       newBlocks = append([]core.ChainEvent{*newHead}, newBlocks...)
     }
