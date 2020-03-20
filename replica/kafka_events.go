@@ -135,7 +135,7 @@ func (producer *KafkaEventProducer) RelayEvents(bc ChainEventSubscriber) {
         }
         for _, pce := range newBlocks {
           if !setTest(pce.Hash) {
-            if err := producer.Emit(ce); err != nil {
+            if err := producer.Emit(pce); err != nil {
               log.Error("Failed to produce event log: %v", err.Error())
             }
             setAdd(pce.Hash)
