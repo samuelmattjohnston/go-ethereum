@@ -2,7 +2,6 @@ package replica
 
 import (
   "github.com/Shopify/sarama"
-  // "log"
   "fmt"
   "github.com/ethereum/go-ethereum/common"
   "github.com/ethereum/go-ethereum/core"
