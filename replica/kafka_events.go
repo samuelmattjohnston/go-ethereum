@@ -174,7 +174,6 @@ func (producer *KafkaEventProducer) getNewBlockAncestors(ce core.ChainEvent, h c
 
 func NewKafkaEventProducerFromURLs(brokerURL, topic string, db ethdb.Database) (EventProducer, error) {
   configEntries := make(map[string]*string)
-  configEntries["retention.ms"] = strPtr("3600000")
   brokers, config := cdc.ParseKafkaURL(brokerURL)
   if err := cdc.CreateTopicIfDoesNotExist(brokerURL, topic, 1, configEntries); err != nil {
     return nil, err
