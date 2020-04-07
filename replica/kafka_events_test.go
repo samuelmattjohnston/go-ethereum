@@ -27,6 +27,16 @@ func (cep *mockChainEventProvider) GetChainEvent(h common.Hash, n uint64) (core.
   return core.ChainEvent{}, fmt.Errorf("CE Not found %#x", h)
 }
 
+func (cep *mockChainEventProvider) GetHeadBlockHash() common.Hash {
+  var highest core.ChainEvent
+  for _, v := range cep.kv {
+    if highest.Hash == (common.Hash{}) || v.Block.NumberU64() > highest.Block.NumberU64() {
+      highest = v
+    }
+  }
+  return highest.Hash
+}
+
 
 func getTestProducer(kv map[common.Hash]core.ChainEvent) *KafkaEventProducer {
   if kv == nil { kv = make(map[common.Hash]core.ChainEvent) }
@@ -267,4 +277,35 @@ func TestReorgNotEmittedMessages(t *testing.T) {
   runtime.Gosched()
   time.Sleep(200 * time.Millisecond)
   producer.Close()
+}
+
+
+func TestReprocessEvents(t *testing.T) {
+  kv := make(map[common.Hash]core.ChainEvent)
+  producer := getTestProducer(kv)
+  root := getTestHeader(0, 0, nil)
+  rootCe := getChainEvent(root)
+  kv[rootCe.Hash] = rootCe
+  child := getChainEvent(getTestHeader(1, 1, root))
+  kv[child.Hash] = child
+  grandchild := getChainEvent(getTestHeader(2, 1, child.Block.Header()))
+  kv[grandchild.Hash] = grandchild
+  ch := make(chan core.ChainEvent, 10)
+  if err := producer.ReprocessEvents(ch, 3); err != nil { t.Fatalf(err.Error())}
+  if h := (<-ch).Hash; h != rootCe.Hash { t.Errorf("First result should match root, %#x != %#x", h, rootCe.Hash)}
+  if h := (<-ch).Hash; h != child.Hash { t.Errorf("Second result should match child, %#x != %#x", h, child.Hash)}
+  if h := (<-ch).Hash; h != grandchild.Hash { t.Errorf("Third result should match grandchild, %#x != %#x", h, grandchild.Hash)}
+  select {
+  case <-ch:
+    t.Errorf("Unexpected fourth result")
+  default:
+  }
+  if err := producer.ReprocessEvents(ch, 2); err != nil { t.Fatalf(err.Error())}
+  if h := (<-ch).Hash; h != child.Hash { t.Errorf("Fourth result should match child, %#x != %#x", h, child.Hash)}
+  if h := (<-ch).Hash; h != grandchild.Hash { t.Errorf("Tfifth result should match grandchild, %#x != %#x", h, grandchild.Hash)}
+  select {
+  case <-ch:
+    t.Errorf("Unexpected fourth result")
+  default:
+  }
 }

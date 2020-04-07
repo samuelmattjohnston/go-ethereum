@@ -24,10 +24,15 @@ const (
 type chainEventProvider interface {
   GetChainEvent(common.Hash, uint64) (core.ChainEvent, error)
   GetBlock(common.Hash) (*types.Block, error)
+  GetHeadBlockHash() (common.Hash)
 }
 
 type dbChainEventProvider struct {
   db ethdb.Database
+}
+
+func (cep *dbChainEventProvider) GetHeadBlockHash() common.Hash {
+  return rawdb.ReadHeadBlockHash(cep.db)
 }
 
 func (cep *dbChainEventProvider) GetBlock(h common.Hash) (*types.Block, error) {
@@ -100,9 +105,27 @@ type ChainEventSubscriber interface {
   SubscribeChainEvent(chan<- core.ChainEvent) event.Subscription
 }
 
+func (producer *KafkaEventProducer) ReprocessEvents(ceCh chan<- core.ChainEvent, n int) error {
+  hash := producer.cep.GetHeadBlockHash()
+  block, err := producer.cep.GetBlock(hash)
+  if err != nil { return err }
+  events := make([]core.ChainEvent, n)
+  events[n-1], err = producer.cep.GetChainEvent(block.Hash(), block.NumberU64())
+  if err != nil { return err }
+  for i := n - 1; i > 0 && events[i].Block.NumberU64() > 0; i-- {
+    events[i-1], err =  producer.cep.GetChainEvent(events[i].Block.ParentHash(), events[i].Block.NumberU64() - 1)
+    if err != nil { return err }
+  }
+  for _, ce := range events {
+    ceCh <- ce
+  }
+  return nil
+}
+
 func (producer *KafkaEventProducer) RelayEvents(bc ChainEventSubscriber) {
   go func() {
     ceCh := make(chan core.ChainEvent, 100)
+    go producer.ReprocessEvents(ceCh, 10)
     subscription := bc.SubscribeChainEvent(ceCh)
     recentHashes := make(map[common.Hash]struct{})
     olderHashes := make(map[common.Hash]struct{})
