@@ -221,6 +221,7 @@ type KafkaEventConsumer struct {
   chainHeadFeed event.Feed
   chainSideFeed event.Feed
   offsetFeed event.Feed
+  startingOffset int64
   consumer sarama.PartitionConsumer
   oldMap map[common.Hash]*core.ChainEvent
   currentMap map[common.Hash]*core.ChainEvent
@@ -358,8 +359,18 @@ func (consumer *KafkaEventConsumer) Start() {
       }
       msgType := input.Value[0]
       msg := input.Value[1:]
+      if msgType == EmitMsg && input.Offset < consumer.startingOffset {
+        // During the initial startup, we start several thousand or so messages
+        // before we actually want to resume to make sure we have the blocks in
+        // memory to handle a reorg. We don't want to re-emit these blocks, we
+        // just want to populate our caches.
+        continue
+      }
       if err := consumer.processEvent(msgType, msg); err != nil {
-        log.Error("Error processing input:", "err", err, "msgType", msgType, "msg", msg, "offset", input.Offset)
+        if input.Offset >= consumer.startingOffset {
+          // Don't bother logging errors if we haven't reached the starting offset.
+          log.Error("Error processing input:", "err", err, "msgType", msgType, "msg", msg, "offset", input.Offset)
+        }
       }
       if msgType == EmitMsg {
         consumer.offsetFeed.Send(OffsetHash{input.Offset, common.BytesToHash(msg)})
@@ -434,9 +445,18 @@ func NewKafkaEventConsumerFromURLs(brokerURL, topic string, lastEmittedBlock com
   if err != nil {
     return nil, err
   }
-  partitionConsumer, err := consumer.ConsumePartition(topic, 0, offset)
+  startOffset := offset
+  if startOffset > 5000 {
+    startOffset -= 5000
+  }
+  partitionConsumer, err := consumer.ConsumePartition(topic, 0, startOffset)
   if err != nil {
-    return nil, err
+    // We may not have been able to roll back 1000 messages, so just try with
+    // the provided offset
+    partitionConsumer, err = consumer.ConsumePartition(topic, 0, offset)
+    if err != nil {
+      return nil, err
+    }
   }
   return &KafkaEventConsumer{
     recoverySize: 128, // Geth keeps 128 generations of state trie to handle reorgs, we'll keep at least 128 blocks in memory to be able to handle reorgs.
@@ -445,5 +465,6 @@ func NewKafkaEventConsumerFromURLs(brokerURL, topic string, lastEmittedBlock com
     currentMap: make(map[common.Hash]*core.ChainEvent),
     ready: make(chan struct{}),
     lastEmittedBlock: common.Hash{},
+    startingOffset: offset,
   }, nil
 }
