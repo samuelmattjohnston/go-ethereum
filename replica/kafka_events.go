@@ -244,7 +244,7 @@ func (consumer *KafkaEventConsumer) SubscribeChainHeadEvent(ch chan<- core.Chain
 func (consumer *KafkaEventConsumer) SubscribeChainSideEvent(ch chan<- core.ChainSideEvent) event.Subscription {
   return consumer.chainSideFeed.Subscribe(ch)
 }
-func (consumer *KafkaEventConsumer) SubscribeOffsets(ch chan<- int64) event.Subscription {
+func (consumer *KafkaEventConsumer) SubscribeOffsets(ch chan<- OffsetHash) event.Subscription {
   return consumer.offsetFeed.Subscribe(ch)
 }
 
@@ -339,6 +339,11 @@ func (consumer *KafkaEventConsumer) Ready() chan struct{} {
   return consumer.ready
 }
 
+type OffsetHash struct {
+  Offset int64
+  Hash common.Hash
+}
+
 func (consumer *KafkaEventConsumer) Start() {
   inputChannel := consumer.consumer.Messages()
   go func() {
@@ -357,7 +362,7 @@ func (consumer *KafkaEventConsumer) Start() {
         log.Error("Error processing input:", "err", err, "msgType", msgType, "msg", msg, "offset", input.Offset)
       }
       if msgType == EmitMsg {
-        consumer.offsetFeed.Send(input.Offset)
+        consumer.offsetFeed.Send(OffsetHash{input.Offset, common.BytesToHash(msg)})
       }
     }
   }()
