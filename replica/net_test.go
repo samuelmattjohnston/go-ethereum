@@ -1,19 +1,17 @@
-package replica_test
+package replica
 
 import (
   "fmt"
   "github.com/ethereum/go-ethereum/common/hexutil"
-  "github.com/ethereum/go-ethereum/replica"
   "testing"
 )
-
 
 func TestNetConstants(t *testing.T) {
   backend, _, err := testReplicaBackend()
   if err != nil {
     t.Fatalf(err.Error())
   }
-  netAPI := replica.NewReplicaNetAPI(backend)
+  netAPI := NewReplicaNetAPI(backend)
   if netAPI.Listening() {
     t.Error("netAPI unexpectedly listening")
   }
@@ -26,8 +24,8 @@ func TestNetVersion(t *testing.T) {
   if err != nil {
     t.Fatalf(err.Error())
   }
-  netAPI := replica.NewReplicaNetAPI(backend)
-  if netAPI.Version() == fmt.Sprintf("%s", backend.ProtocolVersion()) {
-    t.Error("Unexpected protocol version %v", netAPI.Version())
+  netAPI := NewReplicaNetAPI(backend)
+  if netAPI.Version() != fmt.Sprintf("%v", backend.ProtocolVersion()) {
+    t.Errorf("Unexpected protocol version %v, wanted %v", netAPI.Version(), backend.ProtocolVersion())
   }
 }

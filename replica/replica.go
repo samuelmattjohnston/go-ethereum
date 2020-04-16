@@ -184,8 +184,12 @@ func (r *Replica) Start(server *p2p.Server) error {
 }
 func (r *Replica) Stop() error {
   r.db.Close()
-  r.graphql.Stop()
-  r.transactionConsumer.Close()
+  if r.graphql != nil {
+    r.graphql.Stop()
+  }
+  if r.transactionConsumer != nil {
+    r.transactionConsumer.Close()
+  }
   return nil
 }
 
@@ -267,8 +271,11 @@ func NewKafkaReplica(db ethdb.Database, config *eth.Config, ctx *node.ServiceCon
     offset,
   )
   if err != nil { return nil, err }
-  transactionConsumer, err := NewKafkaTransactionConsumerFromURLs(kafkaSourceBroker, txPoolTopic)
-  if err != nil { return nil, err }
+  var transactionConsumer TransactionConsumer
+  if txPoolTopic != "" {
+    transactionConsumer, err = NewKafkaTransactionConsumerFromURLs(kafkaSourceBroker, txPoolTopic)
+    if err != nil { return nil, err }
+  }
   log.Info("Populating replica from topic", "topic", kafkaTopic, "offset", offset)
   var transactionProducer TransactionProducer
   if transactionTopic != "" {
