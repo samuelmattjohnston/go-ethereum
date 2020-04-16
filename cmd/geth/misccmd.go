@@ -162,7 +162,7 @@ func kafkaEvents(ctx *cli.Context) error {
   chainHeadEventSub := consumer.SubscribeChainHeadEvent(chainHeadEventCh)
 	chainSideEventCh := make(chan core.ChainSideEvent)
 	chainSideEventSub := consumer.SubscribeChainSideEvent(chainSideEventCh)
-  offsetCh := make(chan int64)
+  offsetCh := make(chan replicaModule.OffsetHash)
   offsetSub := consumer.SubscribeOffsets(offsetCh)
   defer logsEventSub.Unsubscribe()
   defer removedLogsEventSub.Unsubscribe()
