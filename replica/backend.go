@@ -351,7 +351,11 @@ func (backend *ReplicaBackend) Stats() (pending int, queued int) {
 
 func (backend *ReplicaBackend) RPCGasCap() *big.Int {
   // TODO: Make configurable
-  return big.NewInt(int64(math.MaxUint64 / 2))
+  header, err := backend.HeaderByNumber(context.Background(), rpc.LatestBlockNumber)
+  if err != nil {
+    return big.NewInt(int64(math.MaxUint64 / 2))
+  }
+  return big.NewInt(int64(header.GasLimit * 1000))
 }
 
 	// Return empty maps
