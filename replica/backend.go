@@ -507,7 +507,7 @@ func (backend *ReplicaBackend) consumeTransactions(transactionConsumer Transacti
     go func() {
       for tx := range transactionConsumer.Messages() {
         if err := backend.txPool.AddRemote(tx); err != nil && !strings.HasPrefix(err.Error(), "known transaction") {
-          log.Warn("Error adding tx to pool", "tx", tx.Hash(), "error", err)
+          log.Debug("Error adding tx to pool", "tx", tx.Hash(), "error", err)
         }
       }
       }()
