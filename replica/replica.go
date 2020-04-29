@@ -46,6 +46,7 @@ type Replica struct {
   graphql *graphql.Service
   evmConcurrency int
   warmAddressFile string
+  quit chan struct{}
 }
 
 func (r *Replica) Protocols() []p2p.Protocol {
@@ -183,6 +184,7 @@ func (r *Replica) Start(server *p2p.Server) error {
   return nil
 }
 func (r *Replica) Stop() error {
+  r.quit <- struct{}{}
   r.db.Close()
   if r.graphql != nil {
     r.graphql.Stop()
@@ -195,14 +197,21 @@ func (r *Replica) Stop() error {
 
 func NewReplica(db ethdb.Database, config *eth.Config, ctx *node.ServiceContext, transactionProducer TransactionProducer, consumer cdc.LogConsumer, transactionConsumer TransactionConsumer, syncShutdown bool, startupAge, maxOffsetAge, maxBlockAge int64, graphqlEnabled bool, graphqlEndpoint string, graphqlCors []string, graphqlVirtualHosts []string, timeout rpc.HTTPTimeouts, evmConcurrency int, warmAddressFile string) (*Replica, error) {
   var headChan chan []byte
+  quit := make(chan struct{})
   go func() {
-    for operation := range consumer.Messages() {
-      head, err := operation.Apply(db)
-      if err != nil {
-        log.Warn("Error applying operation", "err", err.Error())
-      }
-      if head != nil && headChan != nil {
-        headChan <- head
+    for {
+      select {
+      case operation := <-consumer.Messages():
+        head, err := operation.Apply(db)
+        if err != nil {
+          log.Warn("Error applying operation", "err", err.Error())
+        }
+        if head != nil && headChan != nil {
+          headChan <- head
+        }
+      case <-quit:
+        log.Warn("Operation consumer shutting down")
+        return
       }
     }
   }()
@@ -212,6 +221,7 @@ func NewReplica(db ethdb.Database, config *eth.Config, ctx *node.ServiceContext,
   log.Info("Replica up to date with master")
   if syncShutdown {
     log.Info("Replica shutdown after sync flag was set, shutting down")
+    quit <- struct{}{}
     db.Close()
     os.Exit(0)
   }
@@ -233,7 +243,7 @@ func NewReplica(db ethdb.Database, config *eth.Config, ctx *node.ServiceContext,
     log.Info("Block time is current. Starting replica.")
   }
   headChan = make(chan []byte, 10)
-  replica := &Replica{db, hc, chainConfig, bc, transactionProducer, transactionConsumer, make(chan bool), consumer.TopicName(), maxOffsetAge, maxBlockAge, headChan, nil, nil, evmConcurrency, warmAddressFile}
+  replica := &Replica{db, hc, chainConfig, bc, transactionProducer, transactionConsumer, make(chan bool), consumer.TopicName(), maxOffsetAge, maxBlockAge, headChan, nil, nil, evmConcurrency, warmAddressFile, quit}
   // endpoint string, cors, vhosts []string, timeouts rpc.HTTPTimeouts
   if graphqlEnabled {
     replica.graphql, err = graphql.New(replica.GetBackend(), graphqlEndpoint, graphqlCors, graphqlVirtualHosts, timeout)
