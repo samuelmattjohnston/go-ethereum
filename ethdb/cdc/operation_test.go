@@ -81,7 +81,7 @@ func TestEncodePutOperation(t *testing.T) {
     fmt.Sprintf("%s\n", op)
     checkOperations(op, t)
     db := rawdb.NewMemoryDatabase()
-    err = op.Apply(db)
+    _, err = op.Apply(db)
     if err != nil {
       t.Fatalf("operation.Apply failed: %v", err)
     }
@@ -104,7 +104,7 @@ func TestEncodeDeleteOperation(t *testing.T) {
     checkOperations(op, t)
     db := rawdb.NewMemoryDatabase()
     db.Put([]byte(v), []byte(v))
-    err = op.Apply(db)
+    _, err = op.Apply(db)
     if err != nil {
       t.Fatalf("operation.Apply failed: %v", err)
     }
@@ -133,7 +133,7 @@ func TestEncodeWriteOperation(t *testing.T) {
   checkOperations(op, t)
   db := rawdb.NewMemoryDatabase()
   db.Put([]byte("gone"), []byte("deleted"))
-  err = op.Apply(db)
+  _, err = op.Apply(db)
   if err != nil {
     t.Fatalf("operation.Apply failed: %v", err)
   }
