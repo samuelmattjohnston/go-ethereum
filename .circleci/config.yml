@@ -43,7 +43,7 @@ jobs:
           aws-region: AWS_REGION
       - run:
           name: push to s3
-          command: aws s3 cp ./geth s3://ethercattle-binaries/$CIRCLE_TAG/geth-linux-amd64
+          command: aws s3 cp ./geth s3://ethercattle-binaries/$CIRCLE_TAG/geth-linux-amd64 --acl=public-read
 
 
 workflows:
