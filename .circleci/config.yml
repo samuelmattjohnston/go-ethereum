@@ -44,6 +44,10 @@ jobs:
       - run:
           name: push to s3
           command: aws s3 cp ./geth s3://ethercattle-binaries/$CIRCLE_TAG/geth-linux-amd64 --acl=public-read
+      - run:
+          name: Message Slack
+          command: |
+              ./slack-post.sh -w $SlackWebhook -m "*go-ethereum*:\nTag: $CIRCLE_TAG \n $(jq -r '.builds[0].artifact_id' ./manifest.json)"
 
 
 workflows:
